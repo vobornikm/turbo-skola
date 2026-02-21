@@ -1,0 +1,435 @@
+@page "/auth/register"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@inject IAuthService AuthService
+@inject IUserService UserService
+@inject NavigationManager Navigation
+
+<PageTitle>Registrace</PageTitle>
+
+<LoadingSpinner IsLoading="@isLoading" Message="Registruji..." />
+
+<div class="auth-container">
+    <div class="auth-card">
+        <h1>Registrace</h1>
+        
+        <form @onsubmit="HandleRegister">
+            <div class="form-group">
+                <label for="email">E-mail:</label>
+                <input type="email" 
+                       id="email" 
+                       @bind="email" 
+                       placeholder="tvùj@email.cz"
+                       required />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Heslo:</label>
+                <input type="password" 
+                       id="password" 
+                       @bind="password" 
+                       placeholder="Alespoò 6 znakù"
+                       required />
+                <small class="form-hint">Heslo musí mít alespoò 6 znakù</small>
+            </div>
+
+            <div class="form-group">
+                <label for="passwordConfirm">Potvrzení hesla:</label>
+                <input type="password" 
+                       id="passwordConfirm" 
+                       @bind="passwordConfirm" 
+                       placeholder="Potvrd heslo"
+                       required />
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-error">
+                    @errorMessage
+                </div>
+            }
+
+            <div class="checkbox-group">
+                <label class="checkbox">
+                    <input type="checkbox" @bind="agreedToTerms" />
+                    Souhlasím s <a href="/legal/terms" target="_blank">podmínkami použití</a> 
+                    a <a href="/legal/privacy" target="_blank">ochranou osobních údajù</a>
+                </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary" disabled="@(isLoading || !agreedToTerms)">
+                @if (isLoading)
+                {
+                    <span>Registruji...</span>
+                }
+                else
+                {
+                    <span>Registrovat se</span>
+                }
+            </button>
+        </form>
+
+        <p class="auth-link">
+            Už máš úèet? <a href="/auth/login">Pøihlaš se zde</a>
+        </p>
+
+        <p class="back-link">
+            <a href="/">Zpìt na domù</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    private string email = "";
+    private string password = "";
+    private string passwordConfirm = "";
+    private string parentName = "Rodiè";
+    private string parentPin = "";
+    private List<string> profileNames = new() { "" };
+    private bool agreedToTerms = false;
+    private string errorMessage = "";
+    private bool isLoading = false;
+
+    private void AddProfile()
+    {
+        if (profileNames.Count < 4) // Max 4 dìtské profily
+        {
+            profileNames.Add("");
+        }
+    }
+
+    private void RemoveProfile(int index)
+    {
+        if (profileNames.Count > 1)
+        {
+            profileNames.RemoveAt(index);
+        }
+    }
+
+    private async Task HandleRegister()
+    {
+        // Validace
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "E-mail a heslo jsou povinné.";
+            return;
+        }
+
+        if (password.Length < 6)
+        {
+            errorMessage = "Heslo musí mít alespoò 6 znakù.";
+            return;
+        }
+
+        if (password != passwordConfirm)
+        {
+            errorMessage = "Hesla se neshodují.";
+            return;
+        }
+
+        if (!agreedToTerms)
+        {
+            errorMessage = "Musíš souhlasit s podmínkami.";
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(100);
+            
+            // Filtrovat prázdná jména a vytvoøit seznam profilù
+            var validNames = profileNames
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Trim())
+                .ToList();
+
+            // AuthService.RegisterAsync už volá UserService s rodièovským profilem
+            using var scope = new ServiceCollection()
+                .BuildServiceProvider()
+                .CreateScope();
+            
+            var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
+            
+            var user = await userService.RegisterAsync(email, password, parentName, parentPin, validNames);
+            
+            if (user != null)
+            {
+                // Pøihlásit uživatele
+                var loginSuccess = await AuthService.LoginAsync(email, password);
+                if (loginSuccess)
+                {
+                    Navigation.NavigateTo("/profile/select");
+                }
+                else
+                {
+                    errorMessage = "Registrace probìhla, ale pøihlášení selhalo.";
+                }
+            }
+            else
+            {
+                errorMessage = "Registrace se nezdaøila. E-mail již existuje nebo nastala chyba.";
+            }
+        }
+        catch (Exception)
+        {
+            errorMessage = "Chyba pøi registraci. Zkuste to prosím pozdìji.";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+}
+
+<style>
+    .auth-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+    }
+
+    .auth-card {
+        background: white;
+        padding: 2.5rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 400px;
+    }
+
+    .auth-card h1 {
+        text-align: center;
+        margin-bottom: 2rem;
+        color: #333;
+    }
+
+    form {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: #333;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 1rem;
+        box-sizing: border-box;
+    }
+
+    .form-group input:focus {
+        outline: none;
+        border-color: #4CAF50;
+        box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+    }
+
+    .form-hint {
+        display: block;
+        margin-top: 0.25rem;
+        font-size: 0.85rem;
+        color: #999;
+    }
+
+    .checkbox-group {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+    }
+
+    .checkbox {
+        display: block;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: #666;
+        line-height: 1.6;
+        padding-left: 28px;
+        position: relative;
+        user-select: none;
+    }
+
+    .checkbox input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+        height: 0;
+        width: 0;
+    }
+
+    /* Custom checkbox box */
+    .checkbox::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 2px;
+        width: 18px;
+        height: 18px;
+        border: 2px solid #667eea;
+        border-radius: 4px;
+        background: white;
+        transition: all 0.2s ease;
+    }
+
+    /* Checkmark (hidden by default) */
+    .checkbox::after {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: 3px;
+        width: 6px;
+        height: 10px;
+        border: solid white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+
+    /* When checked */
+    .checkbox input[type="checkbox"]:checked ~ ::before,
+    .checkbox input[type="checkbox"]:checked::before {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-color: #667eea;
+    }
+
+    .checkbox input[type="checkbox"]:checked ~ ::after,
+    .checkbox input[type="checkbox"]:checked::after {
+        opacity: 1;
+    }
+
+    /* Fallback for browsers that don't support :has() */
+    .checkbox:has(input[type="checkbox"]:checked)::before {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-color: #667eea;
+    }
+
+    .checkbox:has(input[type="checkbox"]:checked)::after {
+        opacity: 1;
+    }
+
+    .checkbox a {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .checkbox a:hover {
+        text-decoration: underline;
+    }
+
+    .alert {
+        padding: 0.75rem;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+    }
+
+    .alert-error {
+        background-color: #ffebee;
+        color: #c62828;
+        border: 1px solid #ef5350;
+    }
+
+    .btn {
+        width: 100%;
+        padding: 0.75rem;
+        border: none;
+        border-radius: 4px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+    }
+
+    .btn-primary {
+        background-color: #4CAF50;
+        color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background-color: #45a049;
+    }
+
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .auth-link {
+        text-align: center;
+        margin-bottom: 1rem;
+        color: #666;
+    }
+
+    .auth-link a {
+        color: #4CAF50;
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    .auth-link a:hover {
+        text-decoration: underline;
+    }
+
+    .back-link {
+        text-align: center;
+        color: #999;
+        font-size: 0.9rem;
+    }
+
+    .back-link a {
+        color: #667eea;
+        text-decoration: none;
+    }
+
+    .back-link a:hover {
+        text-decoration: underline;
+    }
+
+    /* RESPONSIVE */
+    @@media (max-width: 480px) {
+        .auth-container {
+            padding: 0.5rem;
+            align-items: flex-start;
+            padding-top: 2rem;
+        }
+
+        .auth-card {
+            padding: 1.5rem;
+        }
+
+        .auth-card h1 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .checkbox-group {
+            padding: 0.75rem;
+        }
+
+        .checkbox {
+            font-size: 0.85rem;
+        }
+    }
+</style>

@@ -1,0 +1,730 @@
+﻿@using TurboSkola.Services
+@using Microsoft.JSInterop
+@inject IAuthService AuthService
+@inject IProfileService ProfileService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject IPerformanceMonitor PerfMonitor
+@implements IDisposable
+
+<nav class="top-navbar">
+    <div class="navbar-container">
+        <!-- LOGO A NÁZEV (VLEVO - vždy viditelné) -->
+        <div class="navbar-left">
+            <a href="/" class="logo-link">
+                <img src="/images/turbik/turbik-96.png" alt="Turbo Škola" class="logo" />
+                <span class="brand-name">Turbo Škola</span>
+            </a>
+        </div>
+
+        <!-- DESKTOP MENU (CENTER) -->
+        <div class="navbar-center">
+            <a href="/training/setup" class="nav-item">Tréninky</a>
+        </div>
+
+        <!-- PRAVÁ STRANA - Hamburger + User menu -->
+        <div class="navbar-right">
+            <!-- HAMBURGER BUTTON (mobile only - VPRAVO) -->
+            <button class="hamburger-btn" @onclick="ToggleMobileMenu">
+                <span class="hamburger-icon">@(showMobileMenu ? "✖" : "☰")</span>
+            </button>
+
+            @if (isAuthenticated)
+            {
+                <div class="user-menu-wrapper">
+                    <!-- DESKTOP VERSION -->
+                    <button type="button" class="user-menu desktop-user-menu" @onclick="ToggleDropdown" style="border-left: 4px solid @(ProfileService.CurrentAvatarColor ?? "#667eea")">
+                        @if (!string.IsNullOrEmpty(ProfileService.CurrentAvatarIcon))
+                        {
+                            <span class="profile-avatar-icon">@((MarkupString)GetAvatarIcon(ProfileService.CurrentAvatarIcon))</span>
+                        }
+                        <span class="profile-name">@currentProfileName</span>
+                        <span class="dropdown-arrow">&#x25BC;</span>
+                    </button>
+
+                    <!-- MOBILE VERSION - jen ikona -->
+                    <button type="button" class="user-menu mobile-user-menu" @onclick="ToggleDropdown" style="background-color: @(ProfileService.CurrentAvatarColor ?? "#667eea")">
+                        @if (!string.IsNullOrEmpty(ProfileService.CurrentAvatarIcon))
+                        {
+                            <span class="profile-avatar-icon-mobile">@((MarkupString)GetAvatarIcon(ProfileService.CurrentAvatarIcon))</span>
+                        }
+                        else
+                        {
+                            <span class="profile-avatar-icon-mobile">&#x1F464;</span>
+                        }
+                    </button>
+                    
+                    @if (showDropdown)
+                    {
+                        <div class="user-dropdown-menu">
+                            <div class="dropdown-header mobile-only">
+                                <span class="dropdown-profile-name">@currentProfileName</span>
+                            </div>
+                            <a href="/profile/select" class="dropdown-item">&#x1F464; Přepnout profil</a>
+                            <a href="/profile/manage" class="dropdown-item">&#x2699; Spravovat profily</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="/stats" class="dropdown-item">&#x1F4CA; Statistiky</a>
+                            <a href="/account/change-password" class="dropdown-item">&#x1F512; Změna hesla</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="/auth/logout" class="dropdown-item logout">&#x1F6AA; Odhlásit se</a>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <!-- DESKTOP VERSION -->
+                <div class="auth-buttons desktop-auth">
+                    <a href="/auth/login" class="btn-login">Přihlášení</a>
+                    <a href="/auth/register" class="btn-register">Registrace</a>
+                </div>
+
+                <!-- MOBILE VERSION - jen ikona -->
+                <a href="/auth/login" class="mobile-login-icon">
+                    <span>&#x1F464;</span>
+                </a>
+            }
+        </div>
+    </div>
+
+    <!-- MOBILE MENU OVERLAY -->
+    @if (showMobileMenu)
+    {
+        <div class="mobile-menu-overlay" @onclick="CloseMobileMenu">
+            <div class="mobile-menu" @onclick:stopPropagation>
+                <div class="mobile-menu-header">
+                    <h3>Menu</h3>
+                    <button class="close-btn" @onclick="CloseMobileMenu">✖</button>
+                </div>
+                <div class="mobile-menu-items">
+                    <a href="/training/setup" class="mobile-menu-item" @onclick="CloseMobileMenu">
+                        <span class="menu-icon">✖️</span>
+                        <span>Tréninky</span>
+                    </a>
+                    <a href="/stats" class="mobile-menu-item" @onclick="CloseMobileMenu">
+                        <span class="menu-icon">&#x1F4CA;</span>
+                        <span>Statistiky</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+</nav>
+
+<style>
+    .top-navbar {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        height: 60px;
+    }
+
+    .navbar-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 2rem;
+    }
+
+    .navbar-left {
+        display: flex;
+        align-items: center;
+    }
+
+    .logo-link {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        text-decoration: none;
+        color: white;
+    }
+
+    .logo {
+        height: 40px;
+        width: 40px;
+    }
+
+    .brand-name {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: white;
+    }
+
+    .navbar-center {
+        display: flex;
+        gap: 2rem;
+    }
+
+    .nav-item {
+        color: white;
+        text-decoration: none;
+        font-size: 1rem;
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .nav-item:hover {
+        background-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .navbar-right {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .user-menu-wrapper {
+        position: relative;
+    }
+
+    .user-menu {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background-color: rgba(255, 255, 255, 0.1);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        color: white;
+        font-size: 1rem;
+        font-weight: 600;
+        font-family: inherit;
+    }
+
+    .user-menu:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .user-name {
+        color: white;
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+
+    .dropdown-arrow {
+        color: white;
+        font-size: 0.7rem;
+    }
+
+    .user-dropdown-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        margin-top: 0.5rem;
+        background: white;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        min-width: 200px;
+        overflow: hidden;
+        z-index: 9999;
+        display: block !important; /* Přepsat Bootstrap */
+    }
+
+    .dropdown-item {
+        display: block;
+        padding: 0.75rem 1rem;
+        color: #333;
+        text-decoration: none;
+        transition: background-color 0.2s;
+    }
+
+    .dropdown-item:hover {
+        background-color: #f5f5f5;
+    }
+
+    .dropdown-item.logout {
+        color: #d32f2f;
+    }
+
+    .dropdown-item.logout:hover {
+        background-color: #ffebee;
+    }
+
+    .dropdown-divider {
+        height: 1px;
+        background-color: #e0e0e0;
+        margin: 0.25rem 0;
+    }
+
+    .auth-buttons {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .btn-login, .btn-register {
+        padding: 0.5rem 1.25rem;
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .btn-login {
+        color: white;
+        background-color: transparent;
+        border: 1px solid white;
+    }
+
+    .btn-login:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-register {
+        color: #667eea;
+        background-color: white;
+    }
+
+    .btn-register:hover {
+        background-color: #f0f0f0;
+    }
+
+    /* HAMBURGER BUTTON - VPRAVO vedle user menu */
+    .hamburger-btn {
+        display: none;
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        padding: 0.5rem;
+        cursor: pointer;
+        margin-left: 0.5rem;
+        transition: transform 0.2s;
+    }
+
+    .hamburger-btn:hover {
+        transform: scale(1.1);
+    }
+
+    .hamburger-icon {
+        display: block;
+        width: 24px;
+        height: 24px;
+        line-height: 24px;
+    }
+
+    /* MOBILE MENU OVERLAY */
+    .mobile-menu-overlay {
+        position: fixed;
+        top: 60px;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+        animation: fadeIn 0.3s;
+    }
+
+    .mobile-menu {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 280px;
+        height: 100%;
+        background: white;
+        box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+        animation: slideInRight 0.3s;
+    }
+
+    .mobile-menu-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid #e0e0e0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .mobile-menu-header h3 {
+        margin: 0;
+        font-size: 1.2rem;
+    }
+
+    .close-btn {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0.5rem;
+    }
+
+    .mobile-menu-items {
+        padding: 1rem 0;
+    }
+
+    .mobile-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.5rem;
+        color: #333;
+        text-decoration: none;
+        transition: background 0.2s;
+        font-size: 1.1rem;
+    }
+
+    .mobile-menu-item:hover {
+        background: #f5f5f5;
+    }
+
+    .menu-icon {
+        font-size: 1.5rem;
+        width: 24px;
+        text-align: center;
+    }
+
+    /* DESKTOP/MOBILE VARIANTS */
+    .desktop-user-menu {
+        display: flex;
+    }
+
+    .mobile-user-menu {
+        display: none;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 2px solid white;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .mobile-user-menu:hover {
+        transform: scale(1.1);
+    }
+
+    .profile-avatar-icon-mobile {
+        font-size: 1.5rem;
+    }
+
+    .mobile-login-icon {
+        display: none;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid white;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        text-decoration: none;
+        transition: transform 0.2s;
+    }
+
+    .mobile-login-icon:hover {
+        transform: scale(1.1);
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .desktop-auth {
+        display: flex;
+    }
+
+    .dropdown-header {
+        padding: 1rem;
+        border-bottom: 1px solid #e0e0e0;
+        background: #f8f9fa;
+    }
+
+    .dropdown-profile-name {
+        font-weight: 600;
+        color: #333;
+    }
+
+    .mobile-only {
+        display: none;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @@keyframes slideInRight {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+    }
+
+    @@media (max-width: 768px) {
+        /* Zobrazit hamburger VPRAVO */
+        .hamburger-btn {
+            display: block;
+            order: 2; /* Hamburger před user menu */
+        }
+
+        /* User menu má order 3 */
+        .user-menu-wrapper,
+        .mobile-login-icon {
+            order: 3;
+        }
+
+        /* Pravá strana jako flex pro správné pořadí */
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Skrýt desktop menu items */
+        .navbar-center {
+            display: none;
+        }
+
+        /* Skrýt desktop verze uživatelského menu */
+        .desktop-user-menu {
+            display: none;
+        }
+
+        .desktop-auth {
+            display: none;
+        }
+
+        /* Zobrazit mobilní verze */
+        .mobile-user-menu {
+            display: flex;
+        }
+
+        .mobile-login-icon {
+            display: flex;
+        }
+
+        .mobile-only {
+            display: block;
+        }
+
+        /* Dropdown na celou šířku na mobilu */
+        .user-dropdown-menu {
+            position: fixed;
+            right: 0;
+            left: 0;
+            top: 60px;
+            border-radius: 0;
+            max-width: none;
+        }
+
+        .navbar-container {
+            padding: 0 1rem;
+        }
+
+        .brand-name {
+            font-size: 1.1rem;
+        }
+
+        .logo {
+            height: 36px;
+            width: 36px;
+        }
+    }
+
+    @@media (max-width: 350px) {
+        /* Na mini mobilech schovat text, nechat jen logo */
+        .brand-name {
+            display: none;
+        }
+
+        .logo {
+            height: 32px;
+            width: 32px;
+        }
+
+        .navbar-container {
+            padding: 0 0.75rem;
+        }
+    }
+</style>
+
+@code {
+private bool isAuthenticated = false;
+private string? currentEmail = null;
+private string? currentProfileName = null;
+private bool isInitialized = false;
+private bool showDropdown = false;
+private bool showMobileMenu = false;
+private System.Threading.Timer? _timer;
+private DotNetObjectReference<NavMenu>? _dotNetHelper;
+private bool _locationChangedRegistered = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _dotNetHelper = DotNetObjectReference.Create(this);
+        
+        // Guard proti multiple registration
+        if (!_locationChangedRegistered)
+        {
+            Navigation.LocationChanged += OnLocationChanged;
+            _locationChangedRegistered = true;
+        }
+        
+        // Přihlásit se k auth state změnám
+        AuthService.OnAuthStateChanged += HandleAuthStateChanged;
+        ProfileService.OnProfileChanged += HandleProfileChanged;
+        
+        await Task.Delay(100);
+        UpdateAuthState();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isInitialized)
+        {
+            isInitialized = true;
+            
+            // JavaScript
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("initializeDropdown", _dotNetHelper);
+            }
+            catch { /* Ignorovat */ }
+        }
+    }
+
+    private void HandleAuthStateChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            UpdateAuthState();
+        });
+    }
+
+    private void HandleProfileChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            UpdateAuthState();
+        });
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (showDropdown)
+        {
+            showDropdown = false;
+            _ = InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void UpdateAuthState()
+    {
+        try
+        {
+            if (AuthService != null && ProfileService != null)
+            {
+                var wasAuthenticated = isAuthenticated;
+                var wasEmail = currentEmail;
+                var wasProfile = currentProfileName;
+                
+                isAuthenticated = AuthService.IsAuthenticated;
+                currentEmail = AuthService.CurrentEmail;
+                
+                if (isAuthenticated && ProfileService.CurrentProfileName == null)
+                {
+                    currentProfileName = "🎯 Vyber profil";
+                }
+                else
+                {
+                    currentProfileName = ProfileService.CurrentProfileName;
+                }
+                
+                if (wasAuthenticated != isAuthenticated || wasEmail != currentEmail || wasProfile != currentProfileName)
+                {
+                    showDropdown = false;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"UpdateAuthState error: {ex.Message}");
+            isAuthenticated = false;
+            currentEmail = null;
+            currentProfileName = null;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleDropdown()
+    {
+        var before = showDropdown;
+        showDropdown = !showDropdown;
+        Console.WriteLine($"[NavMenu] ToggleDropdown: {before} -> {showDropdown}");
+        StateHasChanged();
+    }
+
+    private void CloseDropdown()
+    {
+        Console.WriteLine("[NavMenu] CloseDropdown called");
+        showDropdown = false;
+        StateHasChanged();
+    }
+
+    private void ToggleMobileMenu()
+    {
+        showMobileMenu = !showMobileMenu;
+        StateHasChanged();
+    }
+
+    private void CloseMobileMenu()
+    {
+        showMobileMenu = false;
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        PerfMonitor.LogComponentLifecycle("NavMenu", "Dispose", GetHashCode());
+        PerfMonitor.LogMemory("NavMenu.Dispose");
+        
+        if (_locationChangedRegistered)
+        {
+            Navigation.LocationChanged -= OnLocationChanged;
+            _locationChangedRegistered = false;
+        }
+        
+        AuthService.OnAuthStateChanged -= HandleAuthStateChanged;
+        ProfileService.OnProfileChanged -= HandleProfileChanged;
+        
+        _timer?.Dispose();
+        _dotNetHelper?.Dispose();
+    }
+
+    private string GetAvatarIcon(string icon)
+    {
+        return icon switch
+        {
+            "parent" => "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;",
+            "child" => "&#x1F9D2;",
+            "fox" => "&#x1F98A;",
+            "bear" => "&#x1F43B;",
+            "cat" => "&#x1F431;",
+            "dog" => "&#x1F436;",
+            "rocket" => "&#x1F680;",
+            "ball" => "&#x26BD;",
+            "music" => "&#x1F3B5;",
+            "game" => "&#x1F3AE;",
+            "girl" => "&#x1F467;",
+            "unicorn" => "&#x1F984;",
+            "flower" => "&#x1F338;",
+            "butterfly" => "&#x1F98B;",
+            "bow" => "&#x1F380;",
+            "rainbow" => "&#x1F308;",
+            "star" => "&#x2B50;",
+            "palette" => "&#x1F3A8;",
+            "princess" => "&#x1F478;",
+            "dancer" => "&#x1F483;",
+            _ => "&#x1F464;"
+        };
+    }
+}
+

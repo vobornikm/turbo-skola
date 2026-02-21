@@ -1,0 +1,889 @@
+@page "/training/session"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@using TurboSkola.Utilities
+@using System.Diagnostics
+@inject ISettingsService SettingsService
+@inject ITrainingService TrainingService
+@inject ISessionService SessionService
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Trénink - Malá Násobilka</PageTitle>
+
+<LoadingSpinner IsLoading="@isSaving" Message="Ukládám výsledky..." />
+
+<div class="training-session-container">
+    @if (!isSessionStarted)
+    {
+        <div class="loading">
+            <p>Pøíprava tréninku...</p>
+        </div>
+    }
+    else if (isSessionCompleted)
+    {
+        <div class="results-container">
+            <h1>&#x2605; Výbornì! &#x2605;</h1>
+            <div class="results-summary">
+                <div class="result-item">
+                    <span class="result-label">Doba trvání:</span>
+                    <span class="result-value">@TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss")</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Poèet pøíkladù:</span>
+                    <span class="result-value">@completedExercises</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Správné napoprvé:</span>
+                    <span class="result-value">@correctFirstAttempt / @completedExercises</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Úspìšnost:</span>
+                    <span class="result-value">@(completedExercises > 0 ? Math.Round((double)correctFirstAttempt / completedExercises * 100) : 0)%</span>
+                </div>
+            </div>
+            <button class="btn-primary" @onclick="GoHome" disabled="@isSaving">
+                @if (isSaving)
+                {
+                    <span>&#x27F3; Ukládám...</span>
+                }
+                else
+                {
+                    <span>&#x2190; Zpìt na domù</span>
+                }
+            </button>
+            <button class="btn-secondary" @onclick="StartNewTraining" disabled="@isSaving">
+                Další trénink &#x2192;
+            </button>
+        </div>
+    }
+    else if (currentExerciseIndex < exercises.Count)
+    {
+        <div class="exercise-area">
+            <button class="btn-details" @onclick="ToggleDetails">
+                &#x24D8; @(showDetails ? "Skrýt" : "Zobrazit") detaily
+            </button>
+
+            @if (showDetails)
+            {
+                <div class="details-panel">
+                    <span>@(currentExerciseIndex + 1) / @exercises.Count</span>
+                    <span>@TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss") / @TimeSpan.FromSeconds(durationSeconds).ToString(@"mm\:ss")</span>
+                </div>
+            }
+
+            <div class="exercise-display">
+                <div class="exercise-text">
+                    @exercises[currentExerciseIndex].Exercise.DisplayText
+                </div>
+            </div>
+
+            @if (!exercises[currentExerciseIndex].IsCorrect)
+            {
+                <div class="input-container">
+                    <input type="number" 
+                           @ref="answerInput"
+                           @bind="currentAnswer" 
+                           @bind:event="oninput"
+                           @onkeydown="OnKeyDown"
+                           inputmode="numeric"
+                           placeholder="Odpovìï"
+                           class="answer-input" />
+                    
+                    @if (exercises[currentExerciseIndex].Attempts > 0 && !exercises[currentExerciseIndex].IsCorrect)
+                    {
+                        <div class="wrong-answer">
+                            <span class="wrong-text">@exercises[currentExerciseIndex].UserAnswer</span>
+                            <span class="hint-text">Zkus znovu</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="button-container">
+                    <button class="btn-submit" @onclick="SubmitAnswer" disabled="@string.IsNullOrWhiteSpace(currentAnswer)">
+                        &#x2713; Potvrdit
+                    </button>
+                    
+                    <div class="secondary-buttons">
+                        <button class="btn-end" @onclick="ShowEndConfirmDialog">
+                            &#x25A0; Ukonèit trénink
+                        </button>
+                        <button class="btn-skip" @onclick="ShowSkipConfirmDialog">
+                            &#x2192; Pøeskoèit
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="correct-answer">
+                    <div class="correct-label">@exercises[currentExerciseIndex].UserAnswer</div>
+                    <span class="checkmark">&#x2713;</span>
+                </div>
+            }
+        </div>
+    }
+    
+    <!-- Potvrzovací dialog pro ukonèení tréninku -->
+    @if (showEndConfirm)
+    {
+        <div class="modal-overlay" @onclick="CancelEndTraining">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <h2>&#x26A0; Opravdu chceš skonèit?</h2>
+                <p class="motivational-text">Už jsi zvládl @completedExercises pøíkladù! Jsi tak blízko cíle!</p>
+                <p class="secondary-text">Pokud teï skonèíš, uloží se tvùj progres.</p>
+                <div class="modal-buttons">
+                    <button class="btn-modal-cancel" @onclick="CancelEndTraining">
+                        &#x2190; Zùstat a pokraèovat
+                    </button>
+                    <button class="btn-modal-confirm" @onclick="ConfirmEndTraining">
+                        &#x2713; Ano, ukonèit
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+    
+    <!-- Potvrzovací dialog pro pøeskoèení -->
+    @if (showSkipConfirm)
+    {
+        <div class="modal-overlay" @onclick="CancelSkip">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <h2>&#x2192; Pøeskoèit tento pøíklad?</h2>
+                <p class="motivational-text">Zkus to ještì! Urèitì to zvládneš!</p>
+                <p class="secondary-text">Pøeskoèené pøíklady se nepoèítají do výsledkù.</p>
+                <div class="modal-buttons">
+                    <button class="btn-modal-cancel" @onclick="CancelSkip">
+                        &#x2190; Zkusím to znovu
+                    </button>
+                    <button class="btn-modal-confirm" @onclick="ConfirmSkip">
+                        &#x2192; Pøeskoèit
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+private List<SessionExerciseData> exercises = new();
+private int currentExerciseIndex = 0;
+private string currentAnswer = "";
+private bool isSessionStarted = false;
+private bool isSessionCompleted = false;
+private bool isSaving = false;
+private bool showDetails = false;
+private ElementReference answerInput;
+private int sessionId = 0;
+private Stopwatch stopwatch = new();
+private int elapsedSeconds = 0;
+private int durationSeconds = 0;
+private int completedExercises = 0;
+private int correctFirstAttempt = 0;
+private string durationType = "Time";
+private bool showEndConfirm = false;
+private bool showSkipConfirm = false;
+private TrainingSettings? currentSettings = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Nejdøív zkusit naèíst nastavení z SessionService
+        var settings = SessionService.GetCurrentSettings();
+        
+        // Pokud nejsou v SessionService, naèíst z DB (pro pøihlášené)
+        if (settings == null)
+        {
+            settings = await SettingsService.GetProfileSettingsAsync(null);
+        }
+
+        currentSettings = settings; // Uložit pro pozdìjší použití
+        durationType = settings.DurationType;
+        
+        if (settings.DurationType == "Time")
+        {
+            durationSeconds = settings.DurationValue * 60;
+            GenerateExercisesForTime(settings);
+        }
+        else
+        {
+            durationSeconds = settings.DurationValue * 30;
+            GenerateExercisesForCount(settings);
+        }
+
+        sessionId = (await TrainingService.CreateSessionAsync(
+            AuthService.CurrentUserId,
+            settings.IncludedMultipliers,
+            settings.IncludeMultiplication,
+            settings.IncludeDivision,
+            durationSeconds,
+            settings.DurationType == "Count" ? settings.DurationValue : null
+        )).SessionId;
+
+        stopwatch.Start();
+        isSessionStarted = true;
+        _ = UpdateTimer();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Nekontrolovat focus pokud je session dokonèená (input už neexistuje)
+        if (isSessionCompleted)
+            return;
+            
+        if (firstRender && answerInput.Id != null)
+        {
+            await answerInput.FocusAsync();
+        }
+        else if (!firstRender && currentExerciseIndex < exercises.Count && answerInput.Id != null)
+        {
+            await answerInput.FocusAsync();
+        }
+    }
+
+    private void GenerateExercisesForTime(TrainingSettings settings)
+    {
+        // Pro èasový režim zaèneme s malým poètem a budeme je generovat za bìhu
+        var generator = new ExerciseGenerator();
+        var initialCount = 10; // Zaèneme s 10 pøíklady
+        var generatedExercises = generator.GenerateExercises(
+            initialCount,
+            settings.IncludedMultipliers,
+            settings.IncludeMultiplication,
+            settings.IncludeDivision
+        );
+
+        exercises = generatedExercises.Select((ex, idx) => new SessionExerciseData
+        {
+            Index = idx,
+            Exercise = ex,
+            Attempts = 0,
+            IsCorrect = false,
+            IsSkipped = false,
+            TimeSpentSeconds = 0,
+            StartTime = DateTime.UtcNow
+        }).ToList();
+    }
+
+    private void GenerateExercisesForCount(TrainingSettings settings)
+    {
+        var generator = new ExerciseGenerator();
+        var generatedExercises = generator.GenerateExercises(
+            settings.DurationValue,
+            settings.IncludedMultipliers,
+            settings.IncludeMultiplication,
+            settings.IncludeDivision
+        );
+
+        exercises = generatedExercises.Select((ex, idx) => new SessionExerciseData
+        {
+            Index = idx,
+            Exercise = ex,
+            Attempts = 0,
+            IsCorrect = false,
+            IsSkipped = false,
+            TimeSpentSeconds = 0,
+            StartTime = DateTime.UtcNow
+        }).ToList();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        Console.WriteLine($"Key pressed: {e.Key}");
+        if (e.Key == "Enter" || e.Key == "NumpadEnter")
+        {
+            Console.WriteLine("Enter detected, submitting answer...");
+            await SubmitAnswer();
+        }
+    }
+
+    private async Task SubmitAnswer()
+    {
+        if (string.IsNullOrWhiteSpace(currentAnswer))
+            return;
+
+        if (!int.TryParse(currentAnswer, out int answer))
+            return;
+
+        var currentExercise = exercises[currentExerciseIndex];
+        currentExercise.Attempts++;
+        currentExercise.UserAnswer = answer;
+
+        if (answer == currentExercise.Exercise.CorrectAnswer)
+        {
+            currentExercise.IsCorrect = true;
+            currentExercise.TimeSpentSeconds = (int)(DateTime.UtcNow - currentExercise.StartTime).TotalSeconds;
+            if (currentExercise.Attempts == 1)
+                correctFirstAttempt++;
+            completedExercises++;
+
+            if (elapsedSeconds >= durationSeconds && durationType == "Time")
+            {
+                await CompleteSessionAsync();
+                return;
+            }
+
+            currentExerciseIndex++;
+            currentAnswer = "";
+
+            // Pro èasový režim: generovat nové pøíklady když se blíží konec
+            if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3)
+            {
+                GenerateMoreExercises();
+            }
+
+            if (currentExerciseIndex < exercises.Count)
+            {
+                exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
+                StateHasChanged();
+            }
+            else
+            {
+                await CompleteSessionAsync();
+            }
+        }
+        else
+        {
+            // Špatná odpovìï - vymazat pole pro nový pokus
+            currentAnswer = "";
+            StateHasChanged();
+        }
+    }
+
+    private async Task SkipExercise()
+    {
+        var currentExercise = exercises[currentExerciseIndex];
+        currentExercise.IsSkipped = true;
+        currentExercise.TimeSpentSeconds = (int)(DateTime.UtcNow - currentExercise.StartTime).TotalSeconds;
+
+        currentExerciseIndex++;
+        currentAnswer = "";
+
+        if (currentExerciseIndex < exercises.Count)
+        {
+            exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
+            StateHasChanged();
+        }
+        else
+        {
+            await CompleteSessionAsync();
+        }
+    }
+
+    private void ToggleDetails()
+    {
+        showDetails = !showDetails;
+    }
+
+    private async Task CompleteSessionAsync()
+    {
+        stopwatch.Stop();
+        isSessionCompleted = true;
+        isSaving = true;
+        StateHasChanged();
+        
+        // Pøipravit data pro uložení
+        var exercisesToSave = new List<Data.Models.SessionExercise>();
+        
+        foreach (var ex in exercises.Where(e => !e.IsSkipped))
+        {
+            exercisesToSave.Add(new Data.Models.SessionExercise
+            {
+                SessionId = sessionId,
+                ExerciseIndex = ex.Index,
+                ExerciseText = ex.Exercise.DisplayText,
+                CorrectAnswer = ex.Exercise.CorrectAnswer,
+                UserAnswer = ex.UserAnswer ?? 0,
+                TimeSpentSeconds = ex.TimeSpentSeconds,
+                NumberOfAttempts = ex.Attempts,
+                IsCorrect = ex.IsCorrect,
+                SkippedByUser = ex.IsSkipped
+            });
+        }
+        
+        // Batch save všech výsledkù najednou
+        try
+        {
+            await TrainingService.CompleteSessionAsync(sessionId, correctFirstAttempt, exercises.Sum(e => e.Attempts), exercisesToSave);
+            Console.WriteLine("? Session saved successfully!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"!!! Error saving session: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+        
+        StateHasChanged();
+    }
+
+    private void GoHome()
+    {
+        Navigation.NavigateTo("/");
+    }
+
+    private void StartNewTraining()
+    {
+        Navigation.NavigateTo("/training/setup");
+    }
+
+    private async Task UpdateTimer()
+    {
+        while (!isSessionCompleted && stopwatch.IsRunning)
+        {
+            await Task.Delay(1000);
+            elapsedSeconds = (int)stopwatch.Elapsed.TotalSeconds;
+            StateHasChanged();
+
+            if (elapsedSeconds >= durationSeconds && exercises.Count > 0 && currentExerciseIndex < exercises.Count && durationType == "Time")
+            {
+                await CompleteSessionAsync();
+            }
+        }
+    }
+
+    private void ShowEndConfirmDialog()
+    {
+        Console.WriteLine(">>> Zobrazuji dialog pro ukonèení tréninku");
+        showEndConfirm = true;
+    }
+
+    private void CancelEndTraining()
+    {
+        Console.WriteLine(">>> Zrušeno ukonèení, pokraèuji v tréninku");
+        showEndConfirm = false;
+    }
+
+    private async Task ConfirmEndTraining()
+    {
+        Console.WriteLine(">>> Potvrzeno ukonèení tréninku");
+        showEndConfirm = false;
+        await EndTrainingEarly();
+    }
+
+    private void ShowSkipConfirmDialog()
+    {
+        Console.WriteLine(">>> Zobrazuji dialog pro pøeskoèení");
+        showSkipConfirm = true;
+    }
+
+    private void CancelSkip()
+    {
+        Console.WriteLine(">>> Zrušeno pøeskoèení, pokraèuji");
+        showSkipConfirm = false;
+    }
+
+    private async Task ConfirmSkip()
+    {
+        Console.WriteLine(">>> Potvrzeno pøeskoèení");
+        showSkipConfirm = false;
+        await SkipExercise();
+    }
+
+    private async Task EndTrainingEarly()
+    {
+        Console.WriteLine(">>> Trénink ukonèen pøedèasnì!");
+        await CompleteSessionAsync();
+    }
+
+    private void GenerateMoreExercises()
+    {
+        if (currentSettings == null || durationType != "Time")
+            return;
+
+        Console.WriteLine(">>> Generuji dalších 10 pøíkladù...");
+        
+        var generator = new ExerciseGenerator();
+        var newExercises = generator.GenerateExercises(
+            10, // Vygenerovat dalších 10
+            currentSettings.IncludedMultipliers,
+            currentSettings.IncludeMultiplication,
+            currentSettings.IncludeDivision
+        );
+
+        var startIndex = exercises.Count;
+        foreach (var (ex, idx) in newExercises.Select((ex, idx) => (ex, idx)))
+        {
+            exercises.Add(new SessionExerciseData
+            {
+                Index = startIndex + idx,
+                Exercise = ex,
+                Attempts = 0,
+                IsCorrect = false,
+                IsSkipped = false,
+                TimeSpentSeconds = 0,
+                StartTime = DateTime.UtcNow
+            });
+        }
+        
+        Console.WriteLine($">>> Celkem pøíkladù: {exercises.Count}");
+    }
+}
+
+<style>
+    .training-session-container {
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .loading {
+        color: white;
+        font-size: 1.2rem;
+    }
+
+    .exercise-area {
+        width: 100%;
+        max-width: 600px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 70vh;
+    }
+
+    .btn-details {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        align-self: flex-start;
+    }
+
+    .btn-details:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .details-panel {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+        padding: 0 1rem;
+    }
+
+    .exercise-display {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 2rem 0;
+    }
+
+    .exercise-text {
+        font-size: 4rem;
+        font-weight: bold;
+        color: white;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        text-align: center;
+    }
+
+    .input-container {
+        width: 100%;
+        max-width: 400px;
+        margin-bottom: 2rem;
+    }
+
+    .answer-input {
+        width: 100%;
+        padding: 1rem;
+        font-size: 1.5rem;
+        text-align: center;
+        border: 2px solid white;
+        border-radius: 8px;
+        background: white;
+        color: #333;
+    }
+
+    .answer-input:focus {
+        outline: none;
+        border-color: #4CAF50;
+        box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
+    }
+
+    .wrong-answer {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 0.5rem;
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .wrong-text {
+        font-size: 1rem;
+        color: #ff9800;
+        text-decoration: line-through;
+    }
+
+    .hint-text {
+        font-size: 0.9rem;
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .correct-answer {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .correct-label {
+        font-size: 2rem;
+        color: #4CAF50;
+        font-weight: bold;
+    }
+
+    .checkmark {
+        font-size: 2rem;
+        color: #4CAF50;
+    }
+
+    .button-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        width: 100%;
+        max-width: 400px;
+    }
+
+    .secondary-buttons {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+    }
+
+    .btn-submit {
+        padding: 0.75rem 2rem;
+        font-size: 1.1rem;
+        font-weight: bold;
+        background: #4CAF50;
+        color: white;
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        width: 100%;
+    }
+
+    .btn-submit:hover:not(:disabled) {
+        background: #45a049;
+        transform: scale(1.05);
+    }
+
+    .btn-submit:disabled {
+        background: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.5);
+        cursor: not-allowed;
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-skip,
+    .btn-end {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+        cursor: pointer;
+        flex: 1;
+        transition: all 0.3s ease;
+    }
+
+    .btn-skip:hover {
+        background: rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-end {
+        background: rgba(255, 100, 100, 0.15);
+        border-color: rgba(255, 100, 100, 0.3);
+        color: rgba(255, 200, 200, 0.9);
+    }
+
+    .btn-end:hover {
+        background: rgba(255, 100, 100, 0.25);
+    }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        animation: fadeIn 0.3s ease;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        animation: slideUp 0.3s ease;
+    }
+
+    .modal-content h2 {
+        margin: 0 0 1rem 0;
+        color: #333;
+        font-size: 1.5rem;
+        text-align: center;
+    }
+
+    .motivational-text {
+        font-size: 1.1rem;
+        color: #4CAF50;
+        font-weight: 600;
+        text-align: center;
+        margin: 1rem 0;
+    }
+
+    .secondary-text {
+        font-size: 0.9rem;
+        color: #666;
+        text-align: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .modal-buttons {
+        display: flex;
+        gap: 1rem;
+        flex-direction: column;
+    }
+
+    .btn-modal-cancel {
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-modal-cancel:hover {
+        background: #45a049;
+        transform: scale(1.02);
+    }
+
+    .btn-modal-confirm {
+        padding: 0.75rem 1.5rem;
+        font-size: 0.9rem;
+        background: #f5f5f5;
+        color: #666;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-modal-confirm:hover {
+        background: #e0e0e0;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    @@keyframes slideUp {
+        from {
+            transform: translateY(50px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .results-container {
+        background: white;
+        padding: 2rem;
+        border-radius: 8px;
+        max-width: 500px;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .results-container h1 {
+        font-size: 2.5rem;
+        margin-bottom: 1.5rem;
+        color: #4CAF50;
+    }
+
+    .results-summary {
+        margin-bottom: 2rem;
+    }
+
+    .result-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .result-label {
+        font-weight: 500;
+        color: #666;
+    }
+
+    .result-value {
+        font-weight: bold;
+        color: #333;
+        font-size: 1.1rem;
+    }
+
+    .btn-primary {
+        background-color: #4CAF50;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .btn-primary:hover {
+        background-color: #45a049;
+    }
+
+    .btn-secondary {
+        background-color: #2196F3;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+
+    .btn-secondary:hover {
+        background-color: #0b7dda;
+    }
+</style>

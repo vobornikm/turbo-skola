@@ -1,0 +1,985 @@
+﻿@page "/stats"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@using TurboSkola.Data
+@using TurboSkola.Data.Models
+@using Microsoft.EntityFrameworkCore
+@inject IAuthService AuthService
+@inject IProfileService ProfileService
+@inject UcivoDbContext DbContext
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Moje Statistiky</PageTitle>
+
+<LoadingSpinner IsLoading="@isLoading" Message="Načítám statistiky..." />
+
+@if (!AuthService.IsAuthenticated)
+{
+    <div class="stats-container">
+        <div class="alert alert-warning">
+            <p>Musíš se přihlásit, abys mohl vidět své statistiky.</p>
+            <a href="/auth/login" class="btn btn-primary">Přihlásit se</a>
+        </div>
+    </div>
+}
+else
+{
+    <div class="stats-container">
+        <div class="header">
+            <h1>&#x1F4CA; Moje Statistiky</h1>
+            @if (ProfileService.CurrentProfileName != null)
+            {
+                <p class="stats-profile-info">Profil: <strong>@ProfileService.CurrentProfileName</strong></p>
+            }
+        </div>
+
+        @if (ProfileService.IsCurrentProfileParent && childProfiles != null && childProfiles.Any())
+        {
+            <div class="tabs-container">
+                <div class="tabs">
+                    <button class="tab @(selectedTab == "overview" ? "active" : "")"
+                            @onclick='() => selectedTab = "overview"'>
+                        &#x1F4CA; Přehled
+                    </button>
+                    @foreach (var child in childProfiles)
+                    {
+                        <button class="tab @(selectedTab == child.ProfileId.ToString() ? "active" : "")"
+                                style="border-bottom: 3px solid @(selectedTab == child.ProfileId.ToString() ? child.AvatarColor : "transparent")"
+                                @onclick='() => selectedTab = child.ProfileId.ToString()'>
+                            @((MarkupString)GetAvatarIcon(child.AvatarIcon)) @child.ProfileName
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (selectedTab == "overview")
+            {
+                <h2 style="margin-top: 2rem;">Celkové statistiky všech dětí</h2>
+                @if (allChildrenSessions != null && allChildrenSessions.Any())
+                {
+                    var totalEx = allChildrenSessions.Sum(s => s.TotalExamples);
+                    var correctEx = allChildrenSessions.Sum(s => s.CorrectFirstAttempt);
+                    var successPct = totalEx > 0 ? (double)correctEx / totalEx * 100 : 0;
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3>Celkem tréninků</h3>
+                            <p class="stat-value">@allChildrenSessions.Count</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Celkový čas</h3>
+                            <p class="stat-value">@TimeSpan.FromSeconds(allChildrenSessions.Sum(s => s.DurationSeconds)).ToString(@"hh\:mm\:ss")</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Celkem příkladů</h3>
+                            <p class="stat-value">@allChildrenSessions.Sum(s => s.TotalExamples)</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>Úspěšnost</h3>
+                            <p class="stat-value success-rate">@successPct.ToString("F1")%</p>
+                        </div>
+                    </div>
+
+                    <h3 style="margin-top: 2rem;">Statistiky po dětech</h3>
+                    <div class="children-stats">
+                        @foreach (var child in childProfiles)
+                        {
+                            var childSessions = allChildrenSessions.Where(s => s.ProfileId == child.ProfileId).ToList();
+                            if (childSessions.Any())
+                            {
+                                var cTotal = childSessions.Sum(s => s.TotalExamples);
+                                var cCorrect = childSessions.Sum(s => s.CorrectFirstAttempt);
+                                var cSuccess = cTotal > 0 ? (double)cCorrect / cTotal * 100 : 0;
+
+                                <div class="child-stat-card" style="border-left: 4px solid @child.AvatarColor">
+                                    <h4>@((MarkupString)GetAvatarIcon(child.AvatarIcon)) @child.ProfileName</h4>
+                                    <div class="child-stats-grid">
+                                        <div><strong>Tréninky:</strong> @childSessions.Count</div>
+                                        <div><strong>Čas:</strong> @TimeSpan.FromSeconds(childSessions.Sum(s => s.DurationSeconds)).ToString(@"mm\:ss")</div>
+                                        <div><strong>Příklady:</strong> @cTotal</div>
+                                        <div><strong>Úspěšnost:</strong> @cSuccess.ToString("F1")%</div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p style="text-align: center; margin-top: 2rem;">Děti zatím nemají žádné tréninky.</p>
+                }
+            }
+            else
+            {
+                var selectedProfileId = int.Parse(selectedTab);
+                var selectedChild = childProfiles.FirstOrDefault(p => p.ProfileId == selectedProfileId);
+                var selectedSessions = allChildrenSessions?.Where(s => s.ProfileId == selectedProfileId).OrderByDescending(s => s.EndTime).ToList();
+
+                if (selectedChild != null)
+                {
+                    <h2 style="margin-top: 2rem;">@((MarkupString)GetAvatarIcon(selectedChild.AvatarIcon)) Statistiky: @selectedChild.ProfileName</h2>
+                }
+
+                if (selectedSessions == null || !selectedSessions.Any())
+                {
+                    <p style="text-align: center; margin-top: 2rem;">Toto dítě zatím nemá žádné tréninky.</p>
+                }
+                else
+                {
+                    @RenderStats(selectedSessions)
+                }
+            }
+        }
+        else
+        {
+            @if (trainingSessions == null)
+            {
+                <p>Načítám...</p>
+            }
+            else if (trainingSessions.Count == 0)
+            {
+                <div class="no-data">
+                    <p>Zatím nemáš žádný trénink. Začni trénovat!</p>
+                    <a href="/training/setup" class="btn btn-primary">Spustit trénink</a>
+                </div>
+            }
+            else
+            {
+                @RenderStats(trainingSessions)
+            }
+        }
+
+        <a href="/" class="btn btn-secondary" style="margin-top: 2rem;">Zpět na domů</a>
+    </div>
+}
+
+@if (showDeleteDialog && deletingSessionId.HasValue)
+{
+    <div class="delete-confirm-overlay" @onclick="CancelDeleteSession">
+        <div class="delete-confirm-dialog" @onclick:stopPropagation>
+            @if (!pinVerifiedForDelete)
+            {
+                <h3>Zadej PIN rodičovského profilu</h3>
+                <p>Pro smazání tréninku zadej PIN.</p>
+
+                <PinInput Title=""
+                          Hint="Zadej 4-místný PIN"
+                          OnPinEntered="VerifyDeleteSessionPin"
+                          OnCancel="CancelDeleteSession"
+                          ErrorMessage="@deletePinError" />
+            }
+            else
+            {
+                <h3>Smazat trénink?</h3>
+                <p>Opravdu chceš smazat tento trénink?</p>
+                <p class="warning-text">
+                    <span style="font-size: 1.2rem;">&#x26A0;</span> Tato akce je nevratná!
+                </p>
+                <div class="dialog-actions">
+                    <button class="btn btn-secondary" @onclick="CancelDeleteSession">Zrušit</button>
+                    <button class="btn btn-danger" @onclick="ExecuteDeleteSession">Smazat</button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<TrainingSession>? trainingSessions;
+    private List<UserProfile>? childProfiles;
+    private List<TrainingSession>? allChildrenSessions;
+    private string selectedTab = "overview";
+    private bool isLoading = false;
+    private int? expandedSessionId = null;
+    private List<SessionExercise>? expandedExercises = null;
+    private bool loadingExercises = false;
+    private List<ProblematicExercise>? problematicExercises = null;
+
+    private bool showDeleteDialog = false;
+    private int? deletingSessionId = null;
+    private bool pinVerifiedForDelete = false;
+    private string? deletePinError;
+
+    private class ProblematicExercise
+    {
+        public string Exercise { get; set; } = "";
+        public int WrongCount { get; set; }
+        public int SkippedCount { get; set; }
+        public int TotalErrors { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            return;
+        }
+
+        isLoading = true;
+        try
+        {
+            trainingSessions = await DbContext.TrainingSessions
+                .Where(s => s.ProfileId == ProfileService.CurrentProfileId)
+                .OrderByDescending(s => s.EndTime)
+                .Take(100)
+                .ToListAsync();
+
+            if (trainingSessions.Any())
+            {
+                await LoadProblematicExercises(trainingSessions);
+            }
+
+            if (ProfileService.IsCurrentProfileParent && AuthService.CurrentUserId.HasValue)
+            {
+                childProfiles = await DbContext.UserProfiles
+                    .Where(p => p.UserId == AuthService.CurrentUserId.Value
+                             && p.IsActive
+                             && !p.IsParentProfile)
+                    .OrderBy(p => p.DisplayOrder)
+                    .ToListAsync();
+
+                if (childProfiles.Any())
+                {
+                    var childIds = childProfiles.Select(p => p.ProfileId).ToList();
+                    allChildrenSessions = await DbContext.TrainingSessions
+                        .Where(s => s.ProfileId != null && childIds.Contains(s.ProfileId.Value))
+                        .OrderByDescending(s => s.EndTime)
+                        .ToListAsync();
+                }
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadProblematicExercises(List<TrainingSession> sessions)
+    {
+        var sessionIds = sessions.Select(s => s.SessionId).ToList();
+
+        problematicExercises = await DbContext.SessionExercises
+            .Where(e => sessionIds.Contains(e.SessionId))
+            .Where(e => !e.IsCorrect || e.SkippedByUser)
+            .GroupBy(e => e.ExerciseText)
+            .Select(g => new ProblematicExercise
+            {
+                Exercise = g.Key,
+                WrongCount = g.Count(e => !e.IsCorrect && !e.SkippedByUser),
+                SkippedCount = g.Count(e => e.SkippedByUser),
+                TotalErrors = g.Count()
+            })
+            .OrderByDescending(e => e.TotalErrors)
+            .Take(10)
+            .ToListAsync();
+    }
+
+    private RenderFragment RenderStats(List<TrainingSession> sessions)
+    {
+        int total = sessions.Sum(s => s.TotalExamples);
+        int correct = sessions.Sum(s => s.CorrectFirstAttempt);
+        double percentage = total > 0 ? (double)correct / total * 100 : 0;
+
+        return @<text>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Počet tréninků</h3>
+                    <p class="stat-value">@sessions.Count</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Celkový čas</h3>
+                    <p class="stat-value">@TimeSpan.FromSeconds(sessions.Sum(s => s.DurationSeconds)).ToString(@"hh\:mm\:ss")</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Příkladů celkem</h3>
+                    <p class="stat-value">@sessions.Sum(s => s.TotalExamples)</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Správně napoprvé</h3>
+                    <p class="stat-value">@correct / @total</p>
+                    <p class="stat-percentage">(@percentage.ToString("F1")%)</p>
+                </div>
+            </div>
+
+        @RenderProblematicExercises(sessions)
+
+            <div class="recent-sessions">
+                <h2>Poslední tréninky</h2>
+                <div class="sessions-list">
+                    @foreach (var session in sessions.Take(10))
+                    {
+                        double accuracy = session.TotalExamples > 0 ? (double)session.CorrectFirstAttempt / session.TotalExamples * 100 : 0;
+                        string accuracyClass = accuracy >= 80 ? "accuracy-high" : accuracy >= 60 ? "accuracy-medium" : "accuracy-low";
+                        bool isExpanded = expandedSessionId == session.SessionId;
+
+                        <div class="session-card @(isExpanded ? "expanded" : "")">
+                            <div class="session-item" @onclick="() => ToggleSessionDetail(session.SessionId)">
+                                <div class="session-date">@session.EndTime.ToString("dd.MM.yyyy HH:mm")</div>
+                                <div class="session-stats">
+                                    <span>@session.TotalExamples příkladů</span>
+                                    <span>@TimeSpan.FromSeconds(session.DurationSeconds).ToString(@"mm\:ss")</span>
+                                    <span>@session.CorrectFirstAttempt/@session.TotalExamples správně</span>
+                                </div>
+                                <div class="session-accuracy">
+                                    <span class="@accuracyClass">@accuracy.ToString("F0")%</span>
+                                    <span class="expand-icon">@(isExpanded ? "▼" : "▶")</span>
+                                </div>
+                            </div>
+
+                            @if (isExpanded)
+                            {
+                                <div class="session-detail">
+                                    @if (ProfileService.IsCurrentProfileParent)
+                                    {
+                                        <div class="session-actions">
+                                            <button class="btn btn-sm btn-danger" @onclick="() => ConfirmDeleteSession(session.SessionId)" @onclick:stopPropagation>
+                                                Smazat trénink
+                                            </button>
+                                        </div>
+                                    }
+
+                                    @if (loadingExercises)
+                                    {
+                                        <p style="text-align: center; padding: 1rem;">Načítám detaily...</p>
+                                    }
+                                    else if (expandedExercises != null && expandedExercises.Any())
+                                    {
+                                        <h4>Detail příkladů:</h4>
+                                        <div class="exercises-grid">
+                                            @foreach (var exercise in expandedExercises.OrderBy(e => e.ExerciseIndex))
+                                            {
+                                                string exerciseClass;
+                                                if (exercise.SkippedByUser)
+                                                {
+                                                    exerciseClass = "exercise-skipped";
+                                                }
+                                                else if (!exercise.IsCorrect)
+                                                {
+                                                    exerciseClass = "exercise-wrong";
+                                                }
+                                                else if (exercise.NumberOfAttempts == 1)
+                                                {
+                                                    exerciseClass = "exercise-correct";
+                                                }
+                                                else if (exercise.NumberOfAttempts <= 3)
+                                                {
+                                                    exerciseClass = "exercise-medium";
+                                                }
+                                                else
+                                                {
+                                                    exerciseClass = "exercise-wrong";
+                                                }
+
+                                                <div class="exercise-item @exerciseClass">
+                                                    <div class="exercise-number">#@(exercise.ExerciseIndex + 1)</div>
+                                                    <div class="exercise-text">@exercise.ExerciseText = ?</div>
+                                                    <div class="exercise-answer">
+                                                        @if (exercise.SkippedByUser)
+                                                        {
+                                                            <span class="skipped-label">Přeskočeno</span>
+                                                        }
+                                                        else if (exercise.IsCorrect)
+                                                        {
+                                                            <span class="correct-label">✓ @exercise.UserAnswer</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="wrong-label">✗ @exercise.UserAnswer (správně: @exercise.CorrectAnswer)</span>
+                                                        }
+                                                    </div>
+                                                    <div class="exercise-attempts">@exercise.NumberOfAttempts× pokus</div>
+                                                    <div class="exercise-time">@exercise.TimeSpentSeconds s</div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p style="text-align: center; padding: 1rem;">Žádné detaily k dispozici.</p>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </text>;
+    }
+
+    private async Task ToggleSessionDetail(int sessionId)
+    {
+        if (expandedSessionId == sessionId)
+        {
+            expandedSessionId = null;
+            expandedExercises = null;
+        }
+        else
+        {
+            expandedSessionId = sessionId;
+            loadingExercises = true;
+            StateHasChanged();
+
+            try
+            {
+                expandedExercises = await DbContext.SessionExercises
+                    .Where(e => e.SessionId == sessionId)
+                    .OrderBy(e => e.ExerciseIndex)
+                    .ToListAsync();
+            }
+            finally
+            {
+                loadingExercises = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private RenderFragment RenderProblematicExercises(List<TrainingSession> sessions)
+    {
+        return @<text>
+            <div class="problematic-section">
+                <h2>&#x26A0; Problematické příklady</h2>
+                <p class="section-hint">Příklady, které byly nejčastěji špatně nebo přeskočeny</p>
+
+                @if (problematicExercises == null || !problematicExercises.Any())
+                {
+                    <p style="text-align: center; color: #48bb78; padding: 2rem;">
+                        &#x1F389; Skvělé! Žádné problematické příklady!
+                    </p>
+                }
+                else
+                {
+                    <div class="problematic-grid">
+                        @foreach (var item in problematicExercises)
+                        {
+                            <div class="problematic-item">
+                                <div class="problematic-exercise">@item.Exercise = ?</div>
+                                <div class="problematic-stats">
+                                    @if (item.WrongCount > 0)
+                                    {
+                                        <span class="error-count wrong">✗ @item.WrongCount× špatně</span>
+                                    }
+                                    @if (item.SkippedCount > 0)
+                                    {
+                                        <span class="error-count skipped">⊘ @item.SkippedCount× přeskočeno</span>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </text>;
+    }
+
+    private void ConfirmDeleteSession(int sessionId)
+    {
+        deletingSessionId = sessionId;
+        pinVerifiedForDelete = false;
+        deletePinError = null;
+        showDeleteDialog = true;
+    }
+
+    private void CancelDeleteSession()
+    {
+        deletingSessionId = null;
+        pinVerifiedForDelete = false;
+        deletePinError = null;
+        showDeleteDialog = false;
+    }
+
+    private async Task VerifyDeleteSessionPin(string pin)
+    {
+        if (!ProfileService.IsCurrentProfileParent || !ProfileService.CurrentProfileId.HasValue)
+        {
+            deletePinError = "Musíš být přihlášený jako rodič!";
+            StateHasChanged();
+            return;
+        }
+
+        var isValid = await ProfileService.VerifyPinAsync(ProfileService.CurrentProfileId.Value, pin);
+
+        if (isValid)
+        {
+            pinVerifiedForDelete = true;
+            deletePinError = null;
+            StateHasChanged();
+        }
+        else
+        {
+            deletePinError = "Nesprávný PIN!";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExecuteDeleteSession()
+    {
+        if (!deletingSessionId.HasValue || !pinVerifiedForDelete) return;
+
+        try
+        {
+            var exercises = await DbContext.SessionExercises
+                .Where(e => e.SessionId == deletingSessionId.Value)
+                .ToListAsync();
+
+            DbContext.SessionExercises.RemoveRange(exercises);
+
+            var session = await DbContext.TrainingSessions
+                .FirstOrDefaultAsync(s => s.SessionId == deletingSessionId.Value);
+
+            if (session != null)
+            {
+                DbContext.TrainingSessions.Remove(session);
+                await DbContext.SaveChangesAsync();
+
+                await OnInitializedAsync();
+
+                expandedSessionId = null;
+                expandedExercises = null;
+            }
+        }
+        finally
+        {
+            CancelDeleteSession();
+        }
+    }
+
+    private string GetAvatarIcon(string icon)
+    {
+        return icon switch
+        {
+            "parent" => "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;",
+            "child" => "&#x1F9D2;",
+            "fox" => "&#x1F98A;",
+            "bear" => "&#x1F43B;",
+            "cat" => "&#x1F431;",
+            "dog" => "&#x1F436;",
+            "rocket" => "&#x1F680;",
+            "ball" => "&#x26BD;",
+            "music" => "&#x1F3B5;",
+            "game" => "&#x1F3AE;",
+            "girl" => "&#x1F467;",
+            "unicorn" => "&#x1F984;",
+            "flower" => "&#x1F338;",
+            "butterfly" => "&#x1F98B;",
+            "bow" => "&#x1F380;",
+            "rainbow" => "&#x1F308;",
+            "star" => "&#x2B50;",
+            "palette" => "&#x1F3A8;",
+            "princess" => "&#x1F478;",
+            "dancer" => "&#x1F483;",
+            _ => "&#x1F464;"
+        };
+    }
+
+    public void Dispose()
+    {
+    }
+}
+
+<style>
+    .stats-container {
+        max-width: 1200px;
+        margin: 2rem auto;
+        padding: 2rem;
+    }
+
+    .header {
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+
+    .stats-profile-info {
+        color: #666;
+        font-size: 1.1rem;
+    }
+
+    .stats-profile-info strong {
+        color: #333;
+        font-weight: 700;
+    }
+
+    .tabs-container {
+        margin: 2rem 0;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tabs {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+    }
+
+    .tab {
+        padding: 0.75rem 1.5rem;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #333;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
+        white-space: nowrap;
+    }
+
+    .tab:hover {
+        color: #667eea;
+        background: rgba(102, 126, 234, 0.05);
+    }
+
+    .tab.active {
+        color: #667eea;
+        font-weight: 700;
+    }
+
+    .children-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .child-stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .child-stat-card h4 {
+        margin: 0 0 1rem 0;
+        font-size: 1.2rem;
+    }
+
+    .child-stats-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        font-size: 0.95rem;
+    }
+
+    .child-stats-grid strong {
+        color: #667eea;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+
+    .stat-card h3 {
+        margin: 0 0 1rem 0;
+        font-size: 0.9rem;
+        color: #666;
+        text-transform: uppercase;
+    }
+
+    .stat-value {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: bold;
+        color: #667eea;
+    }
+
+    .stat-value.success-rate {
+        color: #48bb78;
+    }
+
+    .stat-percentage {
+        margin: 0.5rem 0 0 0;
+        font-size: 1rem;
+        color: #666;
+    }
+
+    .no-data {
+        text-align: center;
+        padding: 3rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin: 2rem 0;
+    }
+
+    .recent-sessions {
+        margin-top: 3rem;
+    }
+
+    .sessions-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .session-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .session-card.expanded {
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    }
+
+    .session-item {
+        padding: 1rem;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 1rem;
+        align-items: center;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .session-item:hover {
+        background: rgba(102, 126, 234, 0.05);
+    }
+
+    .expand-icon {
+        margin-left: 0.5rem;
+        color: #667eea;
+        font-size: 0.8rem;
+    }
+
+    .session-detail {
+        padding: 1rem;
+        border-top: 1px solid #e0e0e0;
+        background: #f8f9fa;
+    }
+
+    .session-detail h4 {
+        margin: 0 0 1rem 0;
+        color: #333;
+    }
+
+    .session-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .exercises-grid {
+        display: grid;
+        gap: 0.5rem;
+    }
+
+    .exercise-item {
+        display: grid;
+        grid-template-columns: 40px 1fr 2fr 80px 60px;
+        gap: 1rem;
+        padding: 0.75rem;
+        background: white;
+        border-radius: 4px;
+        border-left: 4px solid #ddd;
+        align-items: center;
+    }
+
+    .exercise-item.exercise-correct {
+        border-left-color: #48bb78;
+        background: rgba(72, 187, 120, 0.05);
+    }
+
+    .exercise-item.exercise-medium {
+        border-left-color: #ed8936;
+        background: rgba(237, 137, 54, 0.05);
+    }
+
+    .exercise-item.exercise-wrong {
+        border-left-color: #f56565;
+        background: rgba(245, 101, 101, 0.05);
+    }
+
+    .exercise-item.exercise-skipped {
+        border-left-color: #ed8936;
+        background: rgba(237, 137, 54, 0.05);
+    }
+
+    .exercise-number {
+        font-weight: 600;
+        color: #666;
+    }
+
+    .exercise-text {
+        font-weight: 500;
+        font-size: 1.1rem;
+    }
+
+    .exercise-answer {
+        font-size: 0.95rem;
+    }
+
+    .correct-label {
+        color: #48bb78;
+        font-weight: 500;
+    }
+
+    .wrong-label {
+        color: #f56565;
+        font-weight: 500;
+    }
+
+    .skipped-label {
+        color: #ed8936;
+        font-weight: 500;
+    }
+
+    .exercise-attempts, .exercise-time {
+        font-size: 0.85rem;
+        color: #666;
+    }
+
+    .problematic-section {
+        margin: 3rem 0;
+        padding: 2rem;
+        background: #fff8f0;
+        border-radius: 8px;
+        border: 2px solid #ed8936;
+    }
+
+    .problematic-section h2 {
+        margin: 0 0 0.5rem 0;
+        color: #ed8936;
+    }
+
+    .section-hint {
+        margin: 0 0 1.5rem 0;
+        color: #666;
+        font-size: 0.9rem;
+    }
+
+    .problematic-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+
+    .problematic-item {
+        background: white;
+        padding: 1rem;
+        border-radius: 6px;
+        border-left: 4px solid #ed8936;
+    }
+
+    .problematic-exercise {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+        color: #333;
+    }
+
+    .problematic-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .error-count {
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .error-count.wrong {
+        color: #f56565;
+    }
+
+    .error-count.skipped {
+        color: #ed8936;
+    }
+
+    .session-date {
+        font-weight: 500;
+        color: #666;
+    }
+
+    .session-stats {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.9rem;
+        color: #666;
+    }
+
+    .session-accuracy {
+        font-weight: 600;
+    }
+
+    .accuracy-high {
+        color: #48bb78;
+    }
+
+    .accuracy-medium {
+        color: #ed8936;
+    }
+
+    .accuracy-low {
+        color: #f56565;
+    }
+
+    .alert {
+        padding: 1rem;
+        border-radius: 8px;
+    }
+
+    .alert-warning {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
+
+    .delete-confirm-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .delete-confirm-dialog {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+    }
+
+    .delete-confirm-dialog h3 {
+        margin-bottom: 1rem;
+        color: #d32f2f;
+    }
+
+    .delete-confirm-dialog p {
+        margin-bottom: 1rem;
+        color: #333;
+    }
+
+    .warning-text {
+        color: #ff9800;
+        font-weight: 500;
+    }
+
+    .dialog-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-top: 1.5rem;
+    }
+</style>

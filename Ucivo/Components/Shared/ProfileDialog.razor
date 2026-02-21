@@ -1,0 +1,293 @@
+@* Dialog pro vytvoøení nebo úpravu profilu *@
+@using TurboSkola.Components.Shared
+
+<div class="profile-dialog-overlay" @onclick="Cancel">
+    <div class="profile-dialog" @onclick:stopPropagation>
+        <h2>@(IsEdit ? "Upravit profil" : "Nový profil")</h2>
+        
+        <div class="form-group">
+            <label>Jméno profilu</label>
+            <input type="text" @bind="ProfileName" class="form-control" placeholder="Napø. Honzík" />
+        </div>
+
+        <div class="form-group">
+            <label>Typ profilu</label>
+            <div class="profile-type-selector">
+                <button type="button" 
+                        class="type-button @(IsParent ? "active" : "")" 
+                        @onclick="() => IsParent = true">
+                    &#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467; Rodiè
+                </button>
+                <button type="button" 
+                        class="type-button @(!IsParent ? "active" : "")" 
+                        @onclick="() => IsParent = false">
+                    &#x1F9D2; Dítì
+                </button>
+            </div>
+        </div>
+
+        @if (IsParent)
+        {
+            <div class="form-group">
+                <label>PIN (4 èíslice)</label>
+                <input type="password" 
+                       @bind="PinCode" 
+                       maxlength="4" 
+                       class="form-control pin-input" 
+                       placeholder="####"
+                       inputmode="numeric" />
+                @if (!string.IsNullOrEmpty(pinError))
+                {
+                    <small class="text-danger">@pinError</small>
+                }
+            </div>
+        }
+
+        <div class="form-group">
+            <label>Barva profilu</label>
+            <div class="color-picker">
+                @foreach (var color in AvailableColors)
+                {
+                    <button type="button" 
+                            class="color-option @(AvatarColor == color.Value ? "selected" : "")"
+                            style="background-color: @color.Value"
+                            @onclick="() => AvatarColor = color.Value"
+                            title="@color.Name">
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Avatar</label>
+            <div class="avatar-picker">
+                @foreach (var avatar in AvailableAvatars)
+                {
+                    <button type="button" 
+                            class="avatar-option @(AvatarIcon == avatar.Value ? "selected" : "")"
+                            @onclick="() => AvatarIcon = avatar.Value">
+                        <span>@((MarkupString)avatar.Icon)</span>
+                    </button>
+                }
+            </div>
+        </div>
+
+        <div class="dialog-actions">
+            <button type="button" class="btn btn-secondary" @onclick="Cancel">Zrušit</button>
+            <button type="button" class="btn btn-primary" @onclick="Save" disabled="@(!IsValid)">
+                @(IsEdit ? "Uložit" : "Vytvoøit")
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool IsEdit { get; set; }
+    [Parameter] public string? ProfileName { get; set; }
+    [Parameter] public bool IsParent { get; set; }
+    [Parameter] public string? PinCode { get; set; }
+    [Parameter] public string AvatarColor { get; set; } = "#667eea";
+    [Parameter] public string AvatarIcon { get; set; } = "child";
+    [Parameter] public EventCallback<ProfileDialogResult> OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string? pinError;
+
+    private bool IsValid
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(ProfileName)) return false;
+            if (IsParent && (string.IsNullOrEmpty(PinCode) || PinCode.Length != 4 || !PinCode.All(char.IsDigit)))
+            {
+                pinError = "PIN musí být 4 èíslice";
+                return false;
+            }
+            pinError = null;
+            return true;
+        }
+    }
+
+    private List<(string Name, string Value)> AvailableColors = new()
+    {
+        ("Fialová", "#667eea"),
+        ("Modrá", "#4299e1"),
+        ("Zelená", "#48bb78"),
+        ("Žlutá", "#ecc94b"),
+        ("Oranžová", "#f6ad55"),
+        ("Èervená", "#fc8181")
+    };
+
+    private List<(string Name, string Value, string Icon)> AvailableAvatars = new()
+    {
+        ("Dítì", "child", "&#x1F9D2;"),
+        ("Rodiè", "parent", "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;"),
+        ("Liška", "fox", "&#x1F98A;"),
+        ("Medvìd", "bear", "&#x1F43B;"),
+        ("Koèka", "cat", "&#x1F431;"),
+        ("Pes", "dog", "&#x1F436;"),
+        ("Raketa", "rocket", "&#x1F680;"),
+        ("Míè", "ball", "&#x26BD;"),
+        ("Hudba", "music", "&#x1F3B5;"),
+        ("Hra", "game", "&#x1F3AE;")
+    };
+
+    private async Task Save()
+    {
+        if (!IsValid) return;
+
+        var result = new ProfileDialogResult
+        {
+            ProfileName = ProfileName!,
+            IsParent = IsParent,
+            PinCode = IsParent ? PinCode : null,
+            AvatarColor = AvatarColor,
+            AvatarIcon = AvatarIcon
+        };
+
+        await OnSave.InvokeAsync(result);
+    }
+
+    private async Task Cancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+}
+
+<style>
+    .profile-dialog-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .profile-dialog {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 500px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .profile-dialog h2 {
+        margin-bottom: 1.5rem;
+        color: #333;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: #333;
+    }
+
+    .profile-type-selector {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .type-button {
+        padding: 1rem;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 1.2rem;
+    }
+
+    .type-button:hover {
+        border-color: #667eea;
+    }
+
+    .type-button.active {
+        border-color: #667eea;
+        background: #f0f4ff;
+    }
+
+    .pin-input {
+        font-size: 1.5rem;
+        text-align: center;
+        letter-spacing: 0.5rem;
+    }
+
+    .color-picker {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 0.5rem;
+    }
+
+    .color-option {
+        width: 50px;
+        height: 50px;
+        border-radius: 8px;
+        border: 3px solid transparent;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .color-option:hover {
+        transform: scale(1.1);
+    }
+
+    .color-option.selected {
+        border-color: #333;
+        box-shadow: 0 0 0 2px white, 0 0 0 4px #333;
+    }
+
+    .avatar-picker {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.5rem;
+    }
+
+    .avatar-option {
+        width: 60px;
+        height: 60px;
+        border-radius: 8px;
+        border: 2px solid #ddd;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .avatar-option:hover {
+        border-color: #667eea;
+        transform: scale(1.1);
+    }
+
+    .avatar-option.selected {
+        border-color: #667eea;
+        background: #f0f4ff;
+    }
+
+    .dialog-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        margin-top: 2rem;
+    }
+
+    .text-danger {
+        color: #d32f2f;
+        font-size: 0.875rem;
+    }
+</style>

@@ -1,0 +1,497 @@
+@page "/profile/manage"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@using TurboSkola.Data.Models
+@using TurboSkola.Components.Shared
+@inject IAuthService AuthService
+@inject IProfileService ProfileService
+@inject NavigationManager Navigation
+
+<PageTitle>Správa profilù</PageTitle>
+
+<div class="profile-manage-container">
+    @if (!ProfileService.IsCurrentProfileParent && ProfileService.CurrentProfileId.HasValue)
+    {
+        <div class="alert alert-warning">
+            <p>Pouze rodièovský profil mùže spravovat profily.</p>
+            <a href="/profile/select" class="btn btn-primary">Pøepnout na rodièovský profil</a>
+        </div>
+    }
+    else if (profiles == null)
+    {
+        <p>Naèítám...</p>
+    }
+    else
+    {
+        <h1>Správa profilù</h1>
+        
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">@errorMessage</div>
+        }
+        
+        <div class="profiles-list">
+            @for (int i = 0; i < profiles.Count; i++)
+            {
+                var profile = profiles[i];
+                var index = i;
+                <div class="profile-item" style="border-left: 4px solid @profile.AvatarColor">
+                    <div class="order-controls">
+                        <button class="btn-order" @onclick="() => MoveUp(index)" disabled="@(index == 0)">
+                            <span>&#x25B2;</span>
+                        </button>
+                        <button class="btn-order" @onclick="() => MoveDown(index)" disabled="@(index == profiles.Count - 1)">
+                            <span>&#x25BC;</span>
+                        </button>
+                    </div>
+                    <div class="profile-avatar-small" style="background-color: @profile.AvatarColor">
+                        <span>@((MarkupString)GetAvatarIcon(profile.AvatarIcon))</span>
+                    </div>
+                    <div class="profile-info">
+                        <span class="profile-name">@profile.ProfileName</span>
+                        @if (profile.IsParentProfile)
+                        {
+                            <span class="profile-badge">&#x1F512; Rodiè</span>
+                        }
+                    </div>
+                    <div class="profile-actions">
+                        <button class="btn btn-sm btn-outline" @onclick="() => StartEdit(profile)">Upravit</button>
+                        @if (profiles.Count > 1)
+                        {
+                            <button class="btn btn-sm btn-danger" @onclick="() => ConfirmDelete(profile)">Smazat</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="add-profile-section">
+            <button class="btn btn-primary" @onclick="ShowCreateDialog">+ Pøidat nový profil</button>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-outline" @onclick="GoBack">Zpìt na výbìr profilu</button>
+        </div>
+    }
+
+    @if (showDialog)
+    {
+        <ProfileDialog IsEdit="editingProfile != null"
+                      ProfileName="@(editingProfile?.ProfileName ?? "")"
+                      IsParent="@(editingProfile?.IsParentProfile ?? false)"
+                      PinCode="@editingProfile?.PinCode"
+                      AvatarColor="@(editingProfile?.AvatarColor ?? "#667eea")"
+                      AvatarIcon="@(editingProfile?.AvatarIcon ?? "child")"
+                      OnSave="editingProfile != null ? HandleEditProfile : HandleCreateProfile"
+                      OnCancel="CloseDialog" />
+    }
+
+    @if (showDeleteConfirm && deletingProfile != null)
+    {
+        <div class="delete-confirm-overlay" @onclick="CancelDelete">
+            <div class="delete-confirm-dialog" @onclick:stopPropagation>
+                @if (!pinVerifiedForDelete)
+                {
+                    <h3>Zadej PIN rodièovského profilu</h3>
+                    <p>Pro smazání profilu zadej PIN.</p>
+                    
+                    <PinInput Title=""
+                             Hint="Zadej 4-místný PIN"
+                             OnPinEntered="VerifyDeletePin"
+                             OnCancel="CancelDelete"
+                             ErrorMessage="@deletePinError" />
+                }
+                else
+                {
+                    <h3>Smazat profil?</h3>
+                    <p>Opravdu chceš smazat profil <strong>@deletingProfile.ProfileName</strong>?</p>
+                    <p class="warning-text">
+                        <span style="font-size: 1.2rem;">&#x26A0;</span> Tato akce je nevratná!
+                    </p>
+                    <div class="dialog-actions">
+                        <button class="btn btn-secondary" @onclick="CancelDelete">Zrušit</button>
+                        <button class="btn btn-danger" @onclick="ExecuteDeleteProfile">Smazat</button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<UserProfile>? profiles;
+    private bool showDialog = false;
+    private bool showDeleteConfirm = false;
+    private UserProfile? editingProfile = null;
+    private UserProfile? deletingProfile = null;
+    private string? errorMessage;
+    private bool pinVerifiedForDelete = false;
+    private string? deletePinError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/auth/login");
+            return;
+        }
+
+        await LoadProfiles();
+    }
+
+    private async Task LoadProfiles()
+    {
+        profiles = await ProfileService.GetUserProfilesAsync(AuthService.CurrentUserId.Value);
+    }
+
+    private void ShowCreateDialog()
+    {
+        editingProfile = null;
+        showDialog = true;
+    }
+
+    private void StartEdit(UserProfile profile)
+    {
+        editingProfile = profile;
+        showDialog = true;
+    }
+
+    private void CloseDialog()
+    {
+        showDialog = false;
+        editingProfile = null;
+        errorMessage = null;
+    }
+
+    private async Task HandleEditProfile(ProfileDialogResult result)
+    {
+        if (editingProfile == null) return;
+
+        try
+        {
+            await ProfileService.UpdateProfileAsync(
+                editingProfile.ProfileId,
+                result.ProfileName,
+                result.PinCode,
+                result.AvatarColor,
+                result.AvatarIcon
+            );
+            
+            await LoadProfiles();
+            CloseDialog();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task HandleCreateProfile(ProfileDialogResult result)
+    {
+        try
+        {
+            await ProfileService.CreateProfileAsync(
+                AuthService.CurrentUserId.Value,
+                result.ProfileName,
+                result.IsParent,
+                result.PinCode,
+                result.AvatarColor,
+                result.AvatarIcon
+            );
+
+            await LoadProfiles();
+            CloseDialog();
+        }
+        catch (InvalidOperationException ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task DeleteProfile(int profileId)
+    {
+        if (profiles!.Count <= 1)
+        {
+            return;
+        }
+
+        await ProfileService.DeleteProfileAsync(profileId);
+        await LoadProfiles();
+    }
+
+    private void ConfirmDelete(UserProfile profile)
+    {
+        deletingProfile = profile;
+        pinVerifiedForDelete = false;
+        deletePinError = null;
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDelete()
+    {
+        deletingProfile = null;
+        pinVerifiedForDelete = false;
+        deletePinError = null;
+        showDeleteConfirm = false;
+    }
+
+    private async Task VerifyDeletePin(string pin)
+    {
+        if (!ProfileService.CurrentProfileId.HasValue)
+        {
+            deletePinError = "Musíš být pøihlášený jako rodiè!";
+            StateHasChanged();
+            return;
+        }
+
+        var isValid = await ProfileService.VerifyPinAsync(ProfileService.CurrentProfileId.Value, pin);
+        
+        if (isValid)
+        {
+            pinVerifiedForDelete = true;
+            deletePinError = null;
+            StateHasChanged();
+        }
+        else
+        {
+            deletePinError = "Nesprávný PIN!";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExecuteDeleteProfile()
+    {
+        if (deletingProfile == null || !pinVerifiedForDelete) return;
+
+        await DeleteProfile(deletingProfile.ProfileId);
+        CancelDelete();
+    }
+
+    private async Task ConfirmDeleteProfile()
+    {
+        if (deletingProfile == null) return;
+
+        await DeleteProfile(deletingProfile.ProfileId);
+        CancelDelete();
+    }
+
+    private async Task MoveUp(int index)
+    {
+        if (index <= 0 || profiles == null) return;
+
+        var profile = profiles[index];
+        var prevProfile = profiles[index - 1];
+
+        await ProfileService.UpdateProfileOrderAsync(profile.ProfileId, prevProfile.DisplayOrder);
+        await ProfileService.UpdateProfileOrderAsync(prevProfile.ProfileId, profile.DisplayOrder);
+
+        await LoadProfiles();
+    }
+
+    private async Task MoveDown(int index)
+    {
+        if (index >= profiles!.Count - 1 || profiles == null) return;
+
+        var profile = profiles[index];
+        var nextProfile = profiles[index + 1];
+
+        await ProfileService.UpdateProfileOrderAsync(profile.ProfileId, nextProfile.DisplayOrder);
+        await ProfileService.UpdateProfileOrderAsync(nextProfile.ProfileId, profile.DisplayOrder);
+
+        await LoadProfiles();
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/profile/select");
+    }
+
+    private string GetAvatarIcon(string icon)
+    {
+        return icon switch
+        {
+            "parent" => "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;",
+            "child" => "&#x1F9D2;",
+            "fox" => "&#x1F98A;",
+            "bear" => "&#x1F43B;",
+            "cat" => "&#x1F431;",
+            "dog" => "&#x1F436;",
+            "rocket" => "&#x1F680;",
+            "ball" => "&#x26BD;",
+            "music" => "&#x1F3B5;",
+            "game" => "&#x1F3AE;",
+            "girl" => "&#x1F467;",
+            "unicorn" => "&#x1F984;",
+            "flower" => "&#x1F338;",
+            "butterfly" => "&#x1F98B;",
+            "bow" => "&#x1F380;",
+            "rainbow" => "&#x1F308;",
+            "star" => "&#x2B50;",
+            "palette" => "&#x1F3A8;",
+            "princess" => "&#x1F478;",
+            "dancer" => "&#x1F483;",
+            _ => "&#x1F464;"
+        };
+    }
+}
+
+<style>
+    .profile-manage-container {
+        max-width: 600px;
+        margin: 2rem auto;
+        padding: 2rem;
+    }
+
+    .profile-manage-container h1 {
+        margin-bottom: 2rem;
+    }
+
+    .alert {
+        padding: 1rem;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+    }
+
+    .alert-warning {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeaa7;
+    }
+
+    .alert-danger {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .profiles-list {
+        margin-bottom: 2rem;
+    }
+
+    .profile-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+    }
+
+    .order-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .btn-order {
+        width: 30px;
+        height: 25px;
+        border: 1px solid #ddd;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 0;
+        transition: all 0.2s;
+    }
+
+    .btn-order:hover:not(:disabled) {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+
+    .btn-order:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+
+    .profile-avatar-small {
+        width: 50px;
+        height: 50px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .profile-info {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .profile-name {
+        font-weight: 500;
+    }
+
+    .profile-badge {
+        display: inline-block;
+        font-size: 0.8rem;
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+
+    .profile-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .add-profile-section {
+        margin-bottom: 2rem;
+    }
+
+    .actions {
+        display: flex;
+        justify-content: center;
+    }
+
+    .delete-confirm-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .delete-confirm-dialog {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 400px;
+        width: 90%;
+        text-align: center;
+    }
+
+    .delete-confirm-dialog h3 {
+        margin-bottom: 1rem;
+        color: #d32f2f;
+    }
+
+    .delete-confirm-dialog p {
+        margin-bottom: 1rem;
+        color: #333;
+    }
+
+    .warning-text {
+        color: #ff9800;
+        font-weight: 500;
+    }
+
+    .dialog-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-top: 1.5rem;
+    }
+</style>

@@ -1,0 +1,14 @@
+@page "/auth/logout"
+@using TurboSkola.Services
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Odhlášení</PageTitle>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/");
+    }
+}

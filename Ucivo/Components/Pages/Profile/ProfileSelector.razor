@@ -1,0 +1,342 @@
+@page "/profile/select"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@using TurboSkola.Data.Models
+@inject IAuthService AuthService
+@inject IProfileService ProfileService
+@inject NavigationManager Navigation
+
+<PageTitle>Výbìr profilu</PageTitle>
+
+<div class="profile-selector-container">
+    @if (showPinPrompt && selectedProfile != null)
+    {
+        <div class="pin-modal">
+            <div class="pin-modal-content">
+                <PinInput Title="@($"PIN pro {selectedProfile.ProfileName}")"
+                          Hint="Zadej 4-místný PIN"
+                          OnPinEntered="VerifyPin"
+                          OnCancel="CancelPin"
+                          ErrorMessage="@pinError" />
+            </div>
+        </div>
+    }
+    else
+    {
+        <h1>Vyber si profil</h1>
+        <p class="subtitle">Každý profil má vlastní statistiky a pokrok</p>
+        
+        @if (profiles == null)
+        {
+            <p>Naèítám profily...</p>
+        }
+        else if (!profiles.Any())
+        {
+            <p>Žádné profily nenalezeny. <a href="/profile/manage">Vytvoøit profil</a></p>
+        }
+        else
+        {
+            <div class="profiles-grid">
+                @foreach (var profile in profiles)
+                {
+                    <div class="profile-card" @onclick="() => SelectProfile(profile)" style="border-color: @profile.AvatarColor">
+                        <div class="profile-avatar" style="background-color: @profile.AvatarColor">
+                            <span>@((MarkupString)GetAvatarIcon(profile.AvatarIcon))</span>
+                        </div>
+                        <h3>@profile.ProfileName</h3>
+                        @if (profile.IsParentProfile)
+                        {
+                            <span class="profile-badge">&#x1F512; Rodiè</span>
+                        }
+                    </div>
+                }
+                
+                <div class="profile-card profile-add" @onclick="GoToManage">
+                    <div class="profile-avatar">
+                        <span>+</span>
+                    </div>
+                    <h3>Spravovat profily</h3>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<UserProfile>? profiles;
+    private UserProfile? selectedProfile;
+    private bool showPinPrompt = false;
+    private string? pinError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/auth/login");
+            return;
+        }
+
+        profiles = await ProfileService.GetUserProfilesAsync(AuthService.CurrentUserId.Value);
+    }
+
+    private void SelectProfile(UserProfile profile)
+    {
+        // Pokud má profil PIN, zobrazit prompt
+        if (!string.IsNullOrEmpty(profile.PinCode))
+        {
+            selectedProfile = profile;
+            showPinPrompt = true;
+            pinError = null;
+        }
+        else
+        {
+            ActivateProfile(profile);
+        }
+    }
+
+    private async Task VerifyPin(string pin)
+    {
+        if (selectedProfile == null) return;
+
+        var isValid = await ProfileService.VerifyPinAsync(selectedProfile.ProfileId, pin);
+        
+        if (isValid)
+        {
+            ActivateProfile(selectedProfile);
+        }
+        else
+        {
+            pinError = "Nesprávný PIN!";
+            StateHasChanged();
+        }
+    }
+
+    private void CancelPin()
+    {
+        showPinPrompt = false;
+        selectedProfile = null;
+        pinError = null;
+    }
+
+    private void ActivateProfile(UserProfile profile)
+    {
+        ProfileService.SetActiveProfile(profile.ProfileId, profile.ProfileName, profile.IsParentProfile, profile.AvatarIcon, profile.AvatarColor);
+        Navigation.NavigateTo("/");
+    }
+
+    private void GoToManage()
+    {
+        Navigation.NavigateTo("/profile/manage");
+    }
+
+    private string GetAvatarIcon(string icon)
+    {
+        return icon switch
+        {
+            "parent" => "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;",  // ????????
+            "child" => "&#x1F9D2;",      // ??
+            "fox" => "&#x1F98A;",        // ??
+            "bear" => "&#x1F43B;",       // ??
+            "cat" => "&#x1F431;",        // ??
+            "dog" => "&#x1F436;",        // ??
+            "rocket" => "&#x1F680;",     // ??
+            "ball" => "&#x26BD;",        // ?
+            "music" => "&#x1F3B5;",      // ??
+            "game" => "&#x1F3AE;",       // ??
+            _ => "&#x1F464;"             // ??
+        };
+    }
+}
+
+<style>
+    .profile-selector-container {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+    }
+
+    .profile-selector-container h1 {
+        color: white;
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        text-align: center;
+    }
+
+    .subtitle {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 1.2rem;
+        margin-bottom: 3rem;
+        text-align: center;
+    }
+
+    .profiles-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2rem;
+        max-width: 800px;
+        width: 100%;
+    }
+
+    .profile-card {
+        cursor: pointer;
+        text-align: center;
+        transition: transform 0.2s;
+        min-width: 0;
+    }
+
+    .profile-card:hover {
+        transform: scale(1.05);
+    }
+
+    .profile-avatar {
+        width: 100%;
+        max-width: 150px;
+        aspect-ratio: 1;
+        margin: 0 auto 1rem;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 4px solid transparent;
+        transition: border-color 0.2s;
+    }
+
+    .profile-card:hover .profile-avatar {
+        border-color: white;
+    }
+
+    .profile-avatar span {
+        font-size: 4rem;
+    }
+
+    .profile-card h3 {
+        color: white;
+        font-size: 1.2rem;
+        margin: 0.5rem 0;
+    }
+
+    .profile-badge {
+        display: inline-block;
+        font-size: 0.9rem;
+        color: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.2);
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+    }
+
+    .pin-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .pin-modal-content {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        max-width: 500px;
+        width: 90%;
+    }
+
+    .profile-add .profile-avatar {
+        background: rgba(255, 255, 255, 0.2);
+        border: 4px dashed rgba(255, 255, 255, 0.5);
+    }
+
+    .profile-add:hover .profile-avatar {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* RESPONSIVE BREAKPOINTS */
+    @@media (max-width: 768px) {
+        .profiles-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+        }
+
+        .profile-selector-container h1 {
+            font-size: 2rem;
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .profile-avatar {
+            max-width: 120px;
+        }
+
+        .profile-avatar span {
+            font-size: 3rem;
+        }
+
+        .profile-card h3 {
+            font-size: 1rem;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .profiles-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .profile-selector-container {
+            padding: 1rem;
+        }
+
+        .profile-selector-container h1 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .profile-avatar {
+            max-width: 100px;
+        }
+
+        .profile-avatar span {
+            font-size: 2.5rem;
+        }
+
+        .profile-card h3 {
+            font-size: 0.9rem;
+        }
+
+        .profile-badge {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.5rem;
+        }
+    }
+
+    @@media (max-width: 320px) {
+        .profiles-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        .profile-avatar {
+            max-width: 80px;
+        }
+
+        .profile-avatar span {
+            font-size: 2rem;
+        }
+    }
+</style>

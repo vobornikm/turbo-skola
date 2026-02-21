@@ -1,0 +1,154 @@
+@* Komponenta pro zadání 4-místného PINU *@
+
+<div class="pin-input-container">
+    <h3>@Title</h3>
+    <p class="pin-hint">@Hint</p>
+    
+    <div class="pin-boxes">
+        @for (int i = 0; i < 4; i++)
+        {
+            var index = i;
+            <input type="password" 
+                   maxlength="1" 
+                   @ref="pinInputs[index]"
+                   value="@pinDigits[index]"
+                   @onkeydown="@(e => HandleKeyDown(e, index))"
+                   @oninput="@(e => HandleInput(e, index))"
+                   class="pin-box" 
+                   inputmode="numeric" />
+        }
+    </div>
+    
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <p class="pin-error">@ErrorMessage</p>
+    }
+    
+    <div class="pin-actions">
+        <button type="button" class="btn btn-secondary" @onclick="OnCancel">Zrušit</button>
+        <button type="button" class="btn btn-primary" @onclick="HandleSubmit" disabled="@(!IsComplete)">Potvrdit</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Zadej PIN";
+    [Parameter] public string Hint { get; set; } = "Zadej 4-místný PIN";
+    [Parameter] public EventCallback<string> OnPinEntered { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+
+    private string[] pinDigits = new string[4] { "", "", "", "" };
+    private ElementReference[] pinInputs = new ElementReference[4];
+
+    private bool IsComplete => pinDigits.All(d => !string.IsNullOrEmpty(d));
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && pinInputs[0].Id != null)
+        {
+            await pinInputs[0].FocusAsync();
+        }
+    }
+
+    private async Task HandleInput(ChangeEventArgs e, int index)
+    {
+        var value = e.Value?.ToString() ?? "";
+        
+        // Povolit jen èíslice
+        if (!string.IsNullOrEmpty(value) && !char.IsDigit(value[0]))
+        {
+            pinDigits[index] = "";
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(value))
+        {
+            pinDigits[index] = value[0].ToString();
+            
+            // Pøejít na další pole
+            if (index < 3)
+            {
+                await pinInputs[index + 1].FocusAsync();
+            }
+            else
+            {
+                // Poslední pole vyplnìno - automaticky odeslat
+                await HandleSubmit();
+            }
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e, int index)
+    {
+        if (e.Key == "Backspace" && string.IsNullOrEmpty(pinDigits[index]) && index > 0)
+        {
+            // Pøejít zpìt
+            await pinInputs[index - 1].FocusAsync();
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (!IsComplete) return;
+        
+        var pin = string.Join("", pinDigits);
+        await OnPinEntered.InvokeAsync(pin);
+    }
+
+    public void Clear()
+    {
+        pinDigits = new string[4] { "", "", "", "" };
+        StateHasChanged();
+    }
+}
+
+<style>
+    .pin-input-container {
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .pin-input-container h3 {
+        margin-bottom: 0.5rem;
+    }
+
+    .pin-hint {
+        color: #666;
+        margin-bottom: 2rem;
+    }
+
+    .pin-boxes {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-bottom: 1rem;
+    }
+
+    .pin-box {
+        width: 60px;
+        height: 70px;
+        font-size: 2rem;
+        text-align: center;
+        border: 2px solid #ddd;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+
+    .pin-box:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+
+    .pin-error {
+        color: #d32f2f;
+        margin: 1rem 0;
+    }
+
+    .pin-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        margin-top: 2rem;
+    }
+</style>

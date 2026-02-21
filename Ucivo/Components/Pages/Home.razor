@@ -1,0 +1,179 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@inject IAuthService AuthService
+
+<PageTitle>Home</PageTitle>
+
+<div class="home-container">
+    <h1>Cvičení z Matematiky</h1>
+    
+    <div class="training-options">
+        <div class="training-card">
+            <h2>Malá Násobilka</h2>
+            <p>Trénuj násobení a dělení s čísly 0-9</p>
+            <a href="/training/setup" class="btn btn-primary">Začít trénink</a>
+        </div>
+    </div>
+
+    @if (isAuthenticated)
+    {
+        <div class="info-section authenticated">
+            <p>👋 Vítej, <strong>@currentEmail</strong>!</p>
+            <div class="user-buttons">
+                <a href="/stats" class="btn btn-outline">Moje statistiky</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="info-section">
+            <p>Zaregistruj se a sleduj svůj progres!</p>
+            <p class="subtext">Bez registrace si můžeš stránky používat anonymně, ale nebudeš moci vidět svou historii a statistiky.</p>
+            <div class="home-auth-buttons">
+                <a href="/auth/login" class="btn btn-outline">Přihlášení</a>
+                <a href="/auth/register" class="btn btn-outline">Registrace</a>
+            </div>
+        </div>
+    }
+
+    <div class="legal-links">
+        <a href="/legal/terms">Podmínky používání</a>
+        <a href="/legal/privacy">Ochrana osobních údajů</a>
+    </div>
+</div>
+
+@code {
+    private bool isAuthenticated = false;
+    private string? currentEmail = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Počkat chvíli, aby se stihl provést auto-login v MainLayout
+        await Task.Delay(100);
+        UpdateAuthState();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            UpdateAuthState();
+        }
+    }
+
+    private void UpdateAuthState()
+    {
+        try
+        {
+            if (AuthService != null)
+            {
+                isAuthenticated = AuthService.IsAuthenticated;
+                currentEmail = AuthService.CurrentEmail;
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            isAuthenticated = false;
+            currentEmail = null;
+        }
+    }
+}
+
+<style>
+    .home-container {
+        max-width: 600px;
+        margin: 2rem auto;
+        padding: 1rem;
+        text-align: center;
+    }
+
+    .training-options {
+        margin: 2rem 0;
+    }
+
+    .training-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .training-card h2 {
+        margin-bottom: 0.5rem;
+    }
+
+    .info-section {
+        margin: 2rem 0;
+        padding: 1rem;
+        background: #e8f5e9;
+        border-radius: 8px;
+    }
+
+    .info-section.authenticated {
+        background: #c8e6c9;
+    }
+
+    .subtext {
+        font-size: 0.9rem;
+        color: #555;
+        margin-bottom: 1rem;
+    }
+
+    .home-auth-buttons,
+    .user-buttons {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .legal-links {
+        margin-top: 2rem;
+        font-size: 0.9rem;
+    }
+
+    .legal-links a {
+        display: inline-block;
+        margin: 0 1rem;
+        color: #666;
+        text-decoration: none;
+    }
+
+    .legal-links a:hover {
+        color: #4CAF50;
+    }
+
+    .btn {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+    }
+
+    .btn-primary {
+        background-color: #4CAF50;
+        color: white;
+        font-size: 1.1rem;
+        padding: 1rem 2rem;
+    }
+
+    .btn-primary:hover {
+        background-color: #45a049;
+    }
+
+    .btn-outline {
+        border: 2px solid #4CAF50;
+        color: #4CAF50;
+        background: white;
+    }
+
+    .btn-outline:hover {
+        background-color: #f0f0f0;
+    }
+</style>
