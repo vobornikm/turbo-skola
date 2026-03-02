@@ -1,12 +1,15 @@
 @page "/training/session"
+@layout TrainingLayout
 @rendermode InteractiveServer
 @using TurboSkola.Services
 @using TurboSkola.Utilities
+@using TurboSkola.Components.Layout
 @using System.Diagnostics
 @inject ISettingsService SettingsService
 @inject ITrainingService TrainingService
 @inject ISessionService SessionService
 @inject IAuthService AuthService
+@inject IProfileService ProfileService
 @inject NavigationManager Navigation
 
 <PageTitle>Trénink - Malá Násobilka</PageTitle>
@@ -211,7 +214,7 @@ private TrainingSettings? currentSettings = null;
         }
 
         sessionId = (await TrainingService.CreateSessionAsync(
-            AuthService.CurrentUserId,
+            ProfileService.CurrentProfileId,
             settings.IncludedMultipliers,
             settings.IncludeMultiplication,
             settings.IncludeDivision,
@@ -384,7 +387,7 @@ private TrainingSettings? currentSettings = null;
         // Pøipravit data pro uložení
         var exercisesToSave = new List<Data.Models.SessionExercise>();
         
-        foreach (var ex in exercises.Where(e => !e.IsSkipped))
+        foreach (var ex in exercises.Where(e => !e.IsSkipped && e.Attempts > 0))
         {
             exercisesToSave.Add(new Data.Models.SessionExercise
             {
@@ -525,13 +528,15 @@ private TrainingSettings? currentSettings = null;
     .training-session-container {
         width: 100%;
         height: 100vh;
+        height: var(--training-vh, 100dvh);
         display: flex;
         flex-direction: column;
-        justify-content: center;
         align-items: center;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1rem;
+        padding: 0.75rem 1rem;
+        box-sizing: border-box;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        overflow: hidden;
     }
 
     .loading {
@@ -541,23 +546,23 @@ private TrainingSettings? currentSettings = null;
 
     .exercise-area {
         width: 100%;
-        max-width: 600px;
+        max-width: 500px;
+        height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: space-between;
-        min-height: 70vh;
     }
 
     .btn-details {
         background: rgba(255, 255, 255, 0.2);
         color: white;
         border: 1px solid rgba(255, 255, 255, 0.4);
-        padding: 0.5rem 1rem;
+        padding: 0.35rem 0.75rem;
         border-radius: 4px;
         cursor: pointer;
-        font-size: 0.9rem;
+        font-size: 0.8rem;
         align-self: flex-start;
+        flex-shrink: 0;
     }
 
     .btn-details:hover {
@@ -579,21 +584,24 @@ private TrainingSettings? currentSettings = null;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin: 2rem 0;
+        width: 100%;
+        min-height: 0;
     }
 
     .exercise-text {
-        font-size: 4rem;
+        font-size: clamp(2.5rem, 12vw, 5rem);
         font-weight: bold;
         color: white;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         text-align: center;
+        line-height: 1.2;
     }
 
     .input-container {
         width: 100%;
         max-width: 400px;
-        margin-bottom: 2rem;
+        flex-shrink: 0;
+        margin-bottom: 0.5rem;
     }
 
     .answer-input {
@@ -636,7 +644,8 @@ private TrainingSettings? currentSettings = null;
         display: flex;
         align-items: center;
         gap: 1rem;
-        margin-bottom: 2rem;
+        flex: 1;
+        justify-content: center;
     }
 
     .correct-label {
@@ -653,9 +662,11 @@ private TrainingSettings? currentSettings = null;
     .button-container {
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: 0.5rem;
         width: 100%;
         max-width: 400px;
+        flex-shrink: 0;
+        padding-bottom: 0.25rem;
     }
 
     .secondary-buttons {
@@ -691,8 +702,8 @@ private TrainingSettings? currentSettings = null;
 
     .btn-skip,
     .btn-end {
-        padding: 0.5rem 1rem;
-        font-size: 0.85rem;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.8rem;
         background: rgba(255, 255, 255, 0.15);
         color: rgba(255, 255, 255, 0.8);
         border: 1px solid rgba(255, 255, 255, 0.3);
@@ -825,8 +836,12 @@ private TrainingSettings? currentSettings = null;
         padding: 2rem;
         border-radius: 8px;
         max-width: 500px;
+        width: 100%;
         text-align: center;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin: auto;
+        max-height: 90dvh;
+        overflow-y: auto;
     }
 
     .results-container h1 {
@@ -885,5 +900,29 @@ private TrainingSettings? currentSettings = null;
 
     .btn-secondary:hover {
         background-color: #0b7dda;
+    }
+
+    @@media (max-width: 480px) {
+        .training-session-container {
+            padding: 0.5rem 0.75rem;
+        }
+
+        .answer-input {
+            padding: 0.6rem;
+            font-size: 1.3rem;
+        }
+
+        .btn-submit {
+            padding: 0.65rem;
+            font-size: 1rem;
+        }
+
+        .results-container {
+            padding: 1.25rem;
+        }
+
+        .results-container h1 {
+            font-size: 1.6rem;
+        }
     }
 </style>

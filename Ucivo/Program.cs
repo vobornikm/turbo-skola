@@ -17,11 +17,11 @@ builder.Services.AddDbContext<UcivoDbContext>(options =>
 
 // Register services
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddSingleton<IAuthService, AuthService>();
-builder.Services.AddSingleton<IProfileService, ProfileService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<ITrainingService, TrainingService>();
-builder.Services.AddSingleton<ISessionService, SessionService>();
+builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddSingleton<IPerformanceMonitor, PerformanceMonitor>();
 builder.Services.AddScoped<ExerciseGenerator>();
 
@@ -48,6 +48,10 @@ app.MapRazorComponents<App>()
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<UcivoDbContext>();
+    
+    // ?? DEBUG: Zobraz co vidí aplikace
+    Console.WriteLine($"?? ENVIRONMENT: {app.Environment.EnvironmentName}");
+    Console.WriteLine($"?? CONNECTION STRING: {app.Configuration.GetConnectionString("DefaultConnection")}");
     
     // Automaticky aplikovat migrace
     context.Database.Migrate();

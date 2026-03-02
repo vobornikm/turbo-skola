@@ -5,6 +5,7 @@
 @inject IAuthService AuthService
 @inject IProfileService ProfileService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Výbìr profilu</PageTitle>
 
@@ -118,9 +119,9 @@
         pinError = null;
     }
 
-    private void ActivateProfile(UserProfile profile)
+    private async Task ActivateProfile(UserProfile profile)
     {
-        ProfileService.SetActiveProfile(profile.ProfileId, profile.ProfileName, profile.IsParentProfile, profile.AvatarIcon, profile.AvatarColor);
+        await ProfileService.SetActiveProfileAsync(profile.ProfileId, profile.ProfileName, profile.IsParentProfile, profile.AvatarIcon, profile.AvatarColor, JSRuntime);
         Navigation.NavigateTo("/");
     }
 
@@ -133,17 +134,49 @@
     {
         return icon switch
         {
-            "parent" => "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;",  // ????????
-            "child" => "&#x1F9D2;",      // ??
-            "fox" => "&#x1F98A;",        // ??
-            "bear" => "&#x1F43B;",       // ??
-            "cat" => "&#x1F431;",        // ??
-            "dog" => "&#x1F436;",        // ??
-            "rocket" => "&#x1F680;",     // ??
-            "ball" => "&#x26BD;",        // ?
-            "music" => "&#x1F3B5;",      // ??
-            "game" => "&#x1F3AE;",       // ??
-            _ => "&#x1F464;"             // ??
+            "parent" => "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;",
+            "child" => "&#x1F9D2;",
+            "child2" => "&#x1F466;",
+            "fox" => "&#x1F98A;",
+            "bear" => "&#x1F43B;",
+            "cat" => "&#x1F431;",
+            "dog" => "&#x1F436;",
+            "rocket" => "&#x1F680;",
+            "ball" => "&#x26BD;",
+            "music" => "&#x1F3B5;",
+            "game" => "&#x1F3AE;",
+            "girl" => "&#x1F467;",
+            "unicorn" => "&#x1F984;",
+            "flower" => "&#x1F338;",
+            "butterfly" => "&#x1F98B;",
+            "bow" => "&#x1F380;",
+            "rainbow" => "&#x1F308;",
+            "star" => "&#x2B50;",
+            "palette" => "&#x1F3A8;",
+            "princess" => "&#x1F478;",
+            "dancer" => "&#x1F483;",
+            "superhero" => "&#x1F9B8;",
+            "astronaut" => "&#x1F9D1;&#x200D;&#x1F680;",
+            "firefighter" => "&#x1F9D1;&#x200D;&#x1F692;",
+            "wizard" => "&#x1F9D9;",
+            "fairy" => "&#x1F9DA;",
+            "superheroine" => "&#x1F9B9;",
+            "mermaid" => "&#x1F9DC;",
+            "dad" => "&#x1F468;",
+            "mom" => "&#x1F469;",
+            "king" => "&#x1F934;",
+            "queen" => "&#x1F451;",
+            "grandma" => "&#x1F475;",
+            "rabbit" => "&#x1F430;",
+            "panda" => "&#x1F43C;",
+            "penguin" => "&#x1F427;",
+            "lion" => "&#x1F981;",
+            "tiger" => "&#x1F42F;",
+            "dolphin" => "&#x1F42C;",
+            "dino" => "&#x1F996;",
+            "dragon" => "&#x1F432;",
+            "frog" => "&#x1F438;",
+            _ => "&#x1F464;"
         };
     }
 }

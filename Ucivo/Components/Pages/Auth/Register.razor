@@ -4,6 +4,7 @@
 @inject IAuthService AuthService
 @inject IUserService UserService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Registrace</PageTitle>
 
@@ -147,19 +148,12 @@
                 .Select(name => name.Trim())
                 .ToList();
 
-            // AuthService.RegisterAsync už volá UserService s rodièovským profilem
-            using var scope = new ServiceCollection()
-                .BuildServiceProvider()
-                .CreateScope();
-            
-            var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-            
-            var user = await userService.RegisterAsync(email, password, parentName, parentPin, validNames);
+            var user = await UserService.RegisterAsync(email, password, parentName, parentPin, validNames);
             
             if (user != null)
             {
                 // Pøihlásit uživatele
-                var loginSuccess = await AuthService.LoginAsync(email, password);
+                var loginSuccess = await AuthService.LoginAsync(email, password, false, JSRuntime);
                 if (loginSuccess)
                 {
                     Navigation.NavigateTo("/profile/select");

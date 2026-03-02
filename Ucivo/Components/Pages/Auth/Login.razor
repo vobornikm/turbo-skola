@@ -3,6 +3,7 @@
 @using TurboSkola.Services
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Pøihlášení</PageTitle>
 
@@ -92,7 +93,7 @@ private bool isLoading = false;
             // Malá pauza pro zobrazení spinneru
             await Task.Delay(100);
             
-            var result = await AuthService.LoginAsync(email, password, rememberMe);
+            var result = await AuthService.LoginAsync(email, password, rememberMe, JSRuntime);
             Console.WriteLine($"[Login] Result from LoginAsync: {result}");
             
             if (result)

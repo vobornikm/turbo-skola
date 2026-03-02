@@ -120,16 +120,49 @@
 
     private List<(string Name, string Value, string Icon)> AvailableAvatars = new()
     {
-        ("Dítì", "child", "&#x1F9D2;"),
+        // Kluci
+        ("Kluk", "child", "&#x1F9D2;"),
+        ("Kluk tmavý", "child2", "&#x1F466;"),
+        ("Superhrdina", "superhero", "&#x1F9B8;"),
+        ("Astronaut", "astronaut", "&#x1F9D1;&#x200D;&#x1F680;"),
+        ("Záchranáø", "firefighter", "&#x1F9D1;&#x200D;&#x1F692;"),
+        ("Kouzelník", "wizard", "&#x1F9D9;"),
+        // Holky
+        ("Holka", "girl", "&#x1F467;"),
+        ("Princezna", "princess", "&#x1F478;"),
+        ("Víla", "fairy", "&#x1F9DA;"),
+        ("Baletka", "dancer", "&#x1F483;"),
+        ("Superhrdinky", "superheroine", "&#x1F9B9;"),
+        ("Moøská panna", "mermaid", "&#x1F9DC;"),
+        // Rodiè
+        ("Táta", "dad", "&#x1F468;"),
+        ("Máma", "mom", "&#x1F469;"),
+        ("Král", "king", "&#x1F934;"),
+        ("Královna", "queen", "&#x1F451;"),
         ("Rodiè", "parent", "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;"),
+        ("Babièka", "grandma", "&#x1F475;"),
+        // Zvíøátka
         ("Liška", "fox", "&#x1F98A;"),
         ("Medvìd", "bear", "&#x1F43B;"),
         ("Koèka", "cat", "&#x1F431;"),
         ("Pes", "dog", "&#x1F436;"),
+        ("Zajíèek", "rabbit", "&#x1F430;"),
+        ("Panda", "panda", "&#x1F43C;"),
+        ("Tuèòák", "penguin", "&#x1F427;"),
+        ("Jednorožec", "unicorn", "&#x1F984;"),
+        ("Lev", "lion", "&#x1F981;"),
+        ("Tygr", "tiger", "&#x1F42F;"),
+        ("Delfín", "dolphin", "&#x1F42C;"),
+        ("Dinosaurus", "dino", "&#x1F996;"),
+        ("Drak", "dragon", "&#x1F432;"),
+        ("Žabka", "frog", "&#x1F438;"),
+        // Zábava
         ("Raketa", "rocket", "&#x1F680;"),
         ("Míè", "ball", "&#x26BD;"),
         ("Hudba", "music", "&#x1F3B5;"),
-        ("Hra", "game", "&#x1F3AE;")
+        ("Hra", "game", "&#x1F3AE;"),
+        ("Hvìzda", "star", "&#x2B50;"),
+        ("Duha", "rainbow", "&#x1F308;"),
     };
 
     private async Task Save()
@@ -251,22 +284,63 @@
 
     .avatar-picker {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(6, 1fr);
         gap: 0.5rem;
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 0.25rem;
     }
 
     .avatar-option {
-        width: 60px;
-        height: 60px;
+        width: 52px;
+        height: 52px;
         border-radius: 8px;
         border: 2px solid #ddd;
         background: white;
         cursor: pointer;
         transition: all 0.2s;
-        font-size: 2rem;
+        font-size: 1.6rem;
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+
+    @@media (max-width: 480px) {
+        .profile-dialog {
+            padding: 1.25rem;
+            width: 96%;
+            max-height: 95vh;
+        }
+
+        .avatar-picker {
+            grid-template-columns: repeat(5, 1fr);
+            max-height: 180px;
+        }
+
+        .avatar-option {
+            width: 44px;
+            height: 44px;
+            font-size: 1.3rem;
+        }
+
+        .color-picker {
+            grid-template-columns: repeat(6, 1fr);
+        }
+
+        .color-option {
+            width: 40px;
+            height: 40px;
+        }
+
+        .profile-type-selector {
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .type-button {
+            padding: 0.75rem 0.5rem;
+            font-size: 1rem;
+        }
     }
 
     .avatar-option:hover {

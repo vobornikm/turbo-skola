@@ -98,7 +98,7 @@ StyleCopReport.xml
 *.svclog
 *.scc
 
-# Sensitive configuration files
+# Production config s hesly - necommitovat do gitu, ale publish ho pošle na server
 appsettings.Production.json
 **/appsettings.Production.json
 

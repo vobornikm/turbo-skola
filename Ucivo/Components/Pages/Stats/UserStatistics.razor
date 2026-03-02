@@ -209,14 +209,27 @@ else
         public int TotalErrors { get; set; }
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!AuthService.IsAuthenticated)
+        if (firstRender)
         {
-            return;
+            ProfileService.OnProfileChanged += OnProfileChangedHandler;
+            await LoadDataAsync();
         }
+    }
+
+    private async void OnProfileChangedHandler()
+    {
+        await LoadDataAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadDataAsync()
+    {
+        if (!AuthService.IsAuthenticated) return;
 
         isLoading = true;
+        StateHasChanged();
         try
         {
             trainingSessions = await DbContext.TrainingSessions
@@ -252,6 +265,7 @@ else
         finally
         {
             isLoading = false;
+            StateHasChanged();
         }
     }
 
@@ -261,7 +275,7 @@ else
 
         problematicExercises = await DbContext.SessionExercises
             .Where(e => sessionIds.Contains(e.SessionId))
-            .Where(e => !e.IsCorrect || e.SkippedByUser)
+            .Where(e => e.NumberOfAttempts > 0 && (!e.IsCorrect || e.SkippedByUser))
             .GroupBy(e => e.ExerciseText)
             .Select(g => new ProblematicExercise
             {
@@ -575,6 +589,7 @@ else
 
     public void Dispose()
     {
+        ProfileService.OnProfileChanged -= OnProfileChangedHandler;
     }
 }
 

@@ -2,13 +2,17 @@
 @using TurboSkola.Services
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Odhlášení</PageTitle>
 
 @code {
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        await AuthService.LogoutAsync();
-        Navigation.NavigateTo("/");
+        if (firstRender)
+        {
+            await AuthService.LogoutAsync(JSRuntime);
+            Navigation.NavigateTo("/");
+        }
     }
 }

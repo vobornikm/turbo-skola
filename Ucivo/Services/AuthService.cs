@@ -1,4 +1,4 @@
-using TurboSkola.Data.Models;
+ï»¿using TurboSkola.Data.Models;
 using Microsoft.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -7,12 +7,12 @@ namespace TurboSkola.Services;
 public interface IAuthService
 {
     event Action? OnAuthStateChanged;
-    
-    Task<bool> LoginAsync(string email, string password, bool rememberMe = false);
+
+    Task<bool> LoginAsync(string email, string password, bool rememberMe, IJSRuntime jsRuntime);
     Task<bool> RegisterAsync(string email, string password);
-    Task LogoutAsync();
+    Task LogoutAsync(IJSRuntime jsRuntime);
     Task<User?> GetCurrentUserAsync();
-    Task<bool> TryAutoLoginAsync();
+    Task<bool> TryAutoLoginAsync(IJSRuntime jsRuntime);
     bool IsAuthenticated { get; }
     int? CurrentUserId { get; }
     string? CurrentEmail { get; }
@@ -21,13 +21,11 @@ public interface IAuthService
 public class AuthService : IAuthService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    
-    // Pro lokální aplikaci staèí jeden uživatel
+
     private User? _currentUser;
     private bool _isInitialized = false;
     private readonly object _lock = new();
-    
-    // Event pro notifikaci zmìny auth stavu
+
     public event Action? OnAuthStateChanged;
 
     public bool IsAuthenticated => _currentUser != null;
@@ -39,76 +37,54 @@ public class AuthService : IAuthService
         _scopeFactory = scopeFactory;
     }
 
-    private User? GetCurrentUser()
-    {
-        lock (_lock)
-        {
-            return _currentUser;
-        }
-    }
-
     private void SetCurrentUser(User? user)
     {
-        lock (_lock)
-        {
-            _currentUser = user;
-        }
-        // Notifikovat zmìnu auth stavu
+        lock (_lock) { _currentUser = user; }
         OnAuthStateChanged?.Invoke();
     }
 
-    public async Task<bool> LoginAsync(string email, string password, bool rememberMe = false)
+    public async Task<bool> LoginAsync(string email, string password, bool rememberMe, IJSRuntime jsRuntime)
     {
-        Console.WriteLine($"[AuthService] LoginAsync started for: {email}");
         using var scope = _scopeFactory.CreateScope();
         var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-        
+
         var user = await userService.LoginAsync(email, password);
-        Console.WriteLine($"[AuthService] User from DB: {(user != null ? user.Email : "NULL")}");
-        
-        if (user != null)
+        if (user == null) return false;
+
+        SetCurrentUser(user);
+
+        try
         {
-            SetCurrentUser(user);
-            Console.WriteLine($"[AuthService] User set, IsAuthenticated: {IsAuthenticated}");
-            
+            // Vï¿½dy uloï¿½it do sessionStorage (pï¿½eï¿½ije refresh, ne zavï¿½enï¿½ okna)
+            await jsRuntime.InvokeVoidAsync("sessionStorage.setItem", "userId", user.UserId.ToString());
+            await jsRuntime.InvokeVoidAsync("sessionStorage.setItem", "userEmail", user.Email);
+
+            // Pokud rememberMe ? uloï¿½it i do localStorage (30 dnï¿½)
             if (rememberMe)
             {
-                try
-                {
-                    var jsRuntime = scope.ServiceProvider.GetRequiredService<IJSRuntime>();
-                    var expirationDate = DateTime.UtcNow.AddDays(30);
-                    await jsRuntime.InvokeVoidAsync("localStorage.setItem", "userId", user.UserId.ToString());
-                    await jsRuntime.InvokeVoidAsync("localStorage.setItem", "userEmail", user.Email);
-                    await jsRuntime.InvokeVoidAsync("localStorage.setItem", "loginExpiration", expirationDate.ToString("o"));
-                    Console.WriteLine($"[AuthService] Saved to localStorage");
-                }
-                catch (InvalidOperationException ex) when (ex.Message.Contains("statically rendered"))
-                {
-                    // JSInterop není dostupný bìhem prerendering - ignorovat, zkusíme pozdìji
-                    Console.WriteLine($"[AuthService] localStorage not available during prerendering, will retry later");
-                }
+                var expiration = DateTime.UtcNow.AddDays(30).ToString("o");
+                await jsRuntime.InvokeVoidAsync("localStorage.setItem", "userId", user.UserId.ToString());
+                await jsRuntime.InvokeVoidAsync("localStorage.setItem", "userEmail", user.Email);
+                await jsRuntime.InvokeVoidAsync("localStorage.setItem", "loginExpiration", expiration);
             }
-            
-            Console.WriteLine($"[AuthService] Returning TRUE");
-            return true;
         }
-        Console.WriteLine($"[AuthService] Returning FALSE");
-        return false;
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AuthService] LoginAsync storage error: {ex.Message}");
+        }
+
+        return true;
     }
 
     public async Task<bool> RegisterAsync(string email, string password)
     {
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
-            return false;
-
-        if (password.Length < 6)
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password) || password.Length < 6)
             return false;
 
         using var scope = _scopeFactory.CreateScope();
         var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-        
-        // Výchozí rodièovský profil s PINEM "0000"
-        var user = await userService.RegisterAsync(email, password, "Rodiè", "0000", new List<string>());
+
+        var user = await userService.RegisterAsync(email, password, "Rodiï¿½", "0000", new List<string>());
         if (user != null)
         {
             SetCurrentUser(user);
@@ -117,63 +93,62 @@ public class AuthService : IAuthService
         return false;
     }
 
-    public async Task LogoutAsync()
+    public async Task LogoutAsync(IJSRuntime jsRuntime)
     {
         SetCurrentUser(null);
-        
+        _isInitialized = false;
+
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var jsRuntime = scope.ServiceProvider.GetRequiredService<IJSRuntime>();
+            await jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", "userId");
+            await jsRuntime.InvokeVoidAsync("sessionStorage.removeItem", "userEmail");
             await jsRuntime.InvokeVoidAsync("localStorage.removeItem", "userId");
             await jsRuntime.InvokeVoidAsync("localStorage.removeItem", "userEmail");
             await jsRuntime.InvokeVoidAsync("localStorage.removeItem", "loginExpiration");
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("statically rendered"))
+        catch (Exception ex)
         {
-            // localStorage není dostupný bìhem prerendering - ignorovat
-            Console.WriteLine("[AuthService] localStorage not available during prerendering");
-        }
-        catch
-        {
-            // localStorage mùže být nedostupný z jiných dùvodù
+            Console.WriteLine($"[AuthService] LogoutAsync storage error: {ex.Message}");
         }
     }
 
-    public Task<User?> GetCurrentUserAsync()
-    {
-        return Task.FromResult(GetCurrentUser());
-    }
+    public Task<User?> GetCurrentUserAsync() => Task.FromResult(_currentUser);
 
-    public async Task<bool> TryAutoLoginAsync()
+    public async Task<bool> TryAutoLoginAsync(IJSRuntime jsRuntime)
     {
-        if (_isInitialized)
-            return IsAuthenticated;
-            
-        _isInitialized = true;
+        if (_isInitialized) return IsAuthenticated;
 
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var jsRuntime = scope.ServiceProvider.GetRequiredService<IJSRuntime>();
-            
-            var userIdStr = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
-            var expirationStr = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "loginExpiration");
+            // 1. Zkus sessionStorage (pï¿½eï¿½ije refresh)
+            var userIdStr = await jsRuntime.InvokeAsync<string>("sessionStorage.getItem", "userId");
 
-            if (string.IsNullOrEmpty(userIdStr) || string.IsNullOrEmpty(expirationStr))
-                return false;
-
-            if (!DateTime.TryParse(expirationStr, out var expiration) || expiration < DateTime.UtcNow)
+            // 2. Fallback na localStorage (rememberMe)
+            if (string.IsNullOrEmpty(userIdStr))
             {
-                await LogoutAsync();
-                return false;
+                userIdStr = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "userId");
+
+                if (!string.IsNullOrEmpty(userIdStr))
+                {
+                    var expirationStr = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "loginExpiration");
+                    if (string.IsNullOrEmpty(expirationStr) ||
+                        !DateTime.TryParse(expirationStr, out var expiration) ||
+                        expiration < DateTime.UtcNow)
+                    {
+                        await LogoutAsync(jsRuntime);
+                        _isInitialized = true;
+                        return false;
+                    }
+                }
             }
 
-            if (!int.TryParse(userIdStr, out var userId))
+            _isInitialized = true;
+
+            if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
                 return false;
 
+            using var scope = _scopeFactory.CreateScope();
             var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-            
             var user = await userService.GetUserByIdAsync(userId);
             if (user != null)
             {
@@ -183,7 +158,8 @@ public class AuthService : IAuthService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"TryAutoLoginAsync error: {ex.Message}");
+            Console.WriteLine($"[AuthService] TryAutoLoginAsync error: {ex.Message}");
+            _isInitialized = true;
         }
 
         return false;

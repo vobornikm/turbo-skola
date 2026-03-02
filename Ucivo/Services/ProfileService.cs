@@ -1,4 +1,5 @@
-using Microsoft.EntityFrameworkCore;
+ï»¿using Microsoft.EntityFrameworkCore;
+using Microsoft.JSInterop;
 using TurboSkola.Data;
 using TurboSkola.Data.Models;
 
@@ -22,7 +23,10 @@ public interface IProfileService
     string? CurrentAvatarIcon { get; }
     string? CurrentAvatarColor { get; }
     void SetActiveProfile(int profileId, string profileName, bool isParent, string avatarIcon, string avatarColor);
+    Task SetActiveProfileAsync(int profileId, string profileName, bool isParent, string avatarIcon, string avatarColor, IJSRuntime jsRuntime);
+    Task ClearActiveProfileAsync(IJSRuntime jsRuntime);
     void ClearActiveProfile();
+    Task<bool> TryRestoreProfileAsync(IJSRuntime jsRuntime);
     event Action? OnProfileChanged;
 }
 
@@ -63,6 +67,23 @@ public class ProfileService : IProfileService
         OnProfileChanged?.Invoke();
     }
 
+    public async Task SetActiveProfileAsync(int profileId, string profileName, bool isParent, string avatarIcon, string avatarColor, IJSRuntime jsRuntime)
+    {
+        SetActiveProfile(profileId, profileName, isParent, avatarIcon, avatarColor);
+        try
+        {
+            await jsRuntime.InvokeVoidAsync("localStorage.setItem", "profileId", profileId.ToString());
+            await jsRuntime.InvokeVoidAsync("localStorage.setItem", "profileName", profileName);
+            await jsRuntime.InvokeVoidAsync("localStorage.setItem", "profileIsParent", isParent.ToString());
+            await jsRuntime.InvokeVoidAsync("localStorage.setItem", "profileAvatarIcon", avatarIcon ?? "");
+            await jsRuntime.InvokeVoidAsync("localStorage.setItem", "profileAvatarColor", avatarColor ?? "");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ProfileService] SetActiveProfileAsync storage error: {ex.Message}");
+        }
+    }
+
     public void ClearActiveProfile()
     {
         _currentProfileId = null;
@@ -71,6 +92,47 @@ public class ProfileService : IProfileService
         _currentAvatarIcon = null;
         _currentAvatarColor = null;
         OnProfileChanged?.Invoke();
+    }
+
+    public async Task ClearActiveProfileAsync(IJSRuntime jsRuntime)
+    {
+        ClearActiveProfile();
+        try
+        {
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", "profileId");
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", "profileName");
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", "profileIsParent");
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", "profileAvatarIcon");
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", "profileAvatarColor");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ProfileService] ClearActiveProfileAsync storage error: {ex.Message}");
+        }
+    }
+
+    public async Task<bool> TryRestoreProfileAsync(IJSRuntime jsRuntime)
+    {
+        try
+        {
+            var profileIdStr = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "profileId");
+            if (string.IsNullOrEmpty(profileIdStr) || !int.TryParse(profileIdStr, out var profileId))
+                return false;
+
+            var profileName = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "profileName") ?? "";
+            var isParentStr = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "profileIsParent");
+            var avatarIcon = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "profileAvatarIcon") ?? "";
+            var avatarColor = await jsRuntime.InvokeAsync<string>("localStorage.getItem", "profileAvatarColor") ?? "";
+            var isParent = bool.TryParse(isParentStr, out var p) && p;
+
+            SetActiveProfile(profileId, profileName, isParent, avatarIcon, avatarColor);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ProfileService] TryRestoreProfileAsync error: {ex.Message}");
+            return false;
+        }
     }
 
     public async Task<List<UserProfile>> GetUserProfilesAsync(int userId)
@@ -133,19 +195,19 @@ public class ProfileService : IProfileService
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<UcivoDbContext>();
         
-        // Validace limitù
+        // Validace limitÅ¯
         if (isParent)
         {
             if (!await CanCreateParentProfileAsync(userId))
-                throw new InvalidOperationException($"Nelze vytvoøit více než {MAX_PARENT_PROFILES} rodièovské profily.");
+                throw new InvalidOperationException($"Nelze vytvoÅ™it vÃ­ce neÅ¾ {MAX_PARENT_PROFILES} rodiÄovskÃ© profily.");
         }
         else
         {
             if (!await CanCreateChildProfileAsync(userId))
-                throw new InvalidOperationException($"Nelze vytvoøit více než {MAX_CHILD_PROFILES} dìtské profily.");
+                throw new InvalidOperationException($"Nelze vytvoÅ™it vÃ­ce neÅ¾ {MAX_CHILD_PROFILES} dÄ›tskÃ© profily.");
         }
         
-        // Zjistit nejvyšší DisplayOrder
+        // Zjistit nejvyÅ¡Å¡Ã­ DisplayOrder
         var maxOrder = await context.UserProfiles
             .Where(p => p.UserId == userId && p.IsActive)
             .MaxAsync(p => (int?)p.DisplayOrder) ?? -1;
@@ -166,7 +228,7 @@ public class ProfileService : IProfileService
         context.UserProfiles.Add(profile);
         await context.SaveChangesAsync();
 
-        // Vytvoøit výchozí nastavení pro profil
+        // VytvoÅ™it vÃ½chozÃ­ nastavenÃ­ pro profil
         var settings = new UserSettings
         {
             ProfileId = profile.ProfileId,
@@ -259,4 +321,6 @@ public class ProfileService : IProfileService
         return true;
     }
 }
+
+
 
