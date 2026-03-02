@@ -98,6 +98,12 @@ StyleCopReport.xml
 *.svclog
 *.scc
 
+# Sensitive configuration files
+appsettings.Production.json
+**/appsettings.Production.json
+
+
+
 # Chutzpah Test files
 _Chutzpah*
 
@@ -361,3 +367,4 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/Ucivo/Web.Release.config
