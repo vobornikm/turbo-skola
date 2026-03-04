@@ -84,6 +84,24 @@
             @if (!exercises[currentExerciseIndex].IsCorrect)
             {
                 <div class="input-container">
+                    @if (exercises[currentExerciseIndex].Attempts > 0 && !exercises[currentExerciseIndex].IsCorrect)
+                    {
+                        <div class="wrong-answer">
+                            <span class="wrong-text">@exercises[currentExerciseIndex].UserAnswer</span>
+                            <span class="hint-text">Nevadí, zkus znovu</span>
+                            @if (exercises[currentExerciseIndex].Attempts >= 2)
+                            {
+                                <div class="hint-buttons">
+                                    <button class="btn-hint" @onclick="ShowHintDialog">&#x1F4A1; Chci poradit</button>
+                                    @if (exercises[currentExerciseIndex].Attempts >= 3)
+                                    {
+                                        <button class="btn-giveup" @onclick="ShowGiveUpDialog">&#x1F3F3;&#xFE0F; Dám se podat</button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
                     <input type="number" 
                            @ref="answerInput"
                            @bind="currentAnswer" 
@@ -92,14 +110,6 @@
                            inputmode="numeric"
                            placeholder="Odpovìï"
                            class="answer-input" />
-                    
-                    @if (exercises[currentExerciseIndex].Attempts > 0 && !exercises[currentExerciseIndex].IsCorrect)
-                    {
-                        <div class="wrong-answer">
-                            <span class="wrong-text">@exercises[currentExerciseIndex].UserAnswer</span>
-                            <span class="hint-text">Zkus znovu</span>
-                        </div>
-                    }
                 </div>
 
                 <div class="button-container">
@@ -166,6 +176,45 @@
             </div>
         </div>
     }
+
+    <!-- Nápovìda dialog -->
+    @if (showHintDialog)
+    {
+        <div class="modal-overlay" @onclick="CloseHintDialog">
+            <div class="modal-content hint-modal" @onclick:stopPropagation="true">
+                <h2>&#x1F4A1; Nápovìda</h2>
+                <p class="hint-dialog-text">@GetHintText()</p>
+                <div class="modal-buttons">
+                    <button class="btn-modal-cancel" @onclick="CloseHintDialog">
+                        &#x2713; Rozumím, zkusím znovu
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Dám se podat dialog -->
+    @if (showGiveUpDialog)
+    {
+        <div class="modal-overlay" @onclick="CloseGiveUpDialog">
+            <div class="modal-content hint-modal" @onclick:stopPropagation="true">
+                <h2>&#x1F4A1; Nápovìda</h2>
+                <p class="hint-dialog-text">@GetHintText()</p>
+                @if (currentExerciseIndex < exercises.Count)
+                {
+                    <div class="solution-box">
+                        <span class="solution-label">Správné øešení:</span>
+                        <span class="solution-text">@exercises[currentExerciseIndex].Exercise.DisplayText = @exercises[currentExerciseIndex].Exercise.CorrectAnswer</span>
+                    </div>
+                }
+                <div class="modal-buttons">
+                    <button class="btn-modal-cancel" @onclick="ConfirmGiveUp">
+                        Rozumím, jdeme dál &#x2192;
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -186,6 +235,8 @@ private int correctFirstAttempt = 0;
 private string durationType = "Time";
 private bool showEndConfirm = false;
 private bool showSkipConfirm = false;
+private bool showHintDialog = false;
+private bool showGiveUpDialog = false;
 private TrainingSettings? currentSettings = null;
 
     protected override async Task OnInitializedAsync()
@@ -490,11 +541,107 @@ private TrainingSettings? currentSettings = null;
         await SkipExercise();
     }
 
+    private void ShowHintDialog() { showHintDialog = true; }
+    private void CloseHintDialog() { showHintDialog = false; }
+    private void ShowGiveUpDialog() { showGiveUpDialog = true; }
+    private void CloseGiveUpDialog() { showGiveUpDialog = false; }
+
+    private async Task ConfirmGiveUp()
+    {
+        showGiveUpDialog = false;
+        var currentExercise = exercises[currentExerciseIndex];
+        currentExercise.TimeSpentSeconds = (int)(DateTime.UtcNow - currentExercise.StartTime).TotalSeconds;
+        // IsSkipped zùstane false – pøíklad se uloží do statistik jako nevyøešený (s poètem pokusù)
+
+        currentExerciseIndex++;
+        currentAnswer = "";
+
+        if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3)
+            GenerateMoreExercises();
+
+        if (currentExerciseIndex < exercises.Count)
+        {
+            exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
+            StateHasChanged();
+        }
+        else
+        {
+            await CompleteSessionAsync();
+        }
+    }
+
+    private string GetHintText()
+    {
+        if (currentExerciseIndex >= exercises.Count) return "";
+        var ex  = exercises[currentExerciseIndex];
+        var a   = ex.Exercise.FirstNumber;
+        var b   = ex.Exercise.SecondNumber;
+        var correct = ex.Exercise.CorrectAnswer;
+        var wrong   = ex.UserAnswer ?? 0;
+        bool isMul  = a * b == correct;
+
+        // Ilustrace násobení jako souèet (max 6 èlenù, pak "...")
+        string mulSum = a <= 6
+            ? string.Join(" + ", Enumerable.Repeat(b, a))
+            : string.Join(" + ", Enumerable.Repeat(b, 5)) + " + ...";
+
+        if (isMul)
+        {
+            if (wrong == a && a != correct)
+                return $"Napsal jsi {a} – to je první násobitel, ne výsledek. " +
+                       $"{a} × {b} znamená seèíst èíslo {b} celkem {a}-krát: {mulSum}.";
+            if (wrong == b && b != correct)
+                    return $"Napsal jsi {b} – to je druhý násobitel, ne výsledek. " +
+                           $"Pøedstav si {a} {NSkupin(a)} po {b}: {mulSum} – zkus je všechny seèíst.";
+            if (a > 1 && wrong == correct - b)
+                return $"Skoro! Možná jsi pøièetl {b} jen {a - 1}-krát místo {a}-krát. " +
+                       $"Zkus ještì jednou od zaèátku: {mulSum}.";
+            if (wrong == correct + b)
+                return $"Skoro! Pøièetl jsi {b} jednou navíc – zkus od svého výsledku odeèíst {b}.";
+            if (wrong > correct)
+                    return $"Výsledek je pøíliš velký. " +
+                           $"Zkus si pøíklad zapsat jako souèet a poèítat pomalu: {mulSum}. Seèti pøesnì {a} {NCisel(a)}.";
+            if (wrong > 0)
+                    return $"Výsledek je pøíliš malý. " +
+                           $"Pøedstav si {a} {NSkupin(a)}, v každé je {b}: {mulSum} – seèti je.";
+            return $"Násobení {a} × {b}: seèti èíslo {b} celkem {a}-krát: {mulSum}.";
+        }
+        else
+        {
+            // Dìlení: a ÷ b = correct
+            if (wrong > a)
+                return $"Výsledek dìlení nemùže být vìtší než {a} (to je èíslo, které dìlíme). " +
+                       $"Dìlením èíslo zmenšujeme – výsledek je maximálnì {a}.";
+            if (wrong == a)
+                return $"Napsal jsi {a} – ale to je èíslo, které dìlíme (dìlenec). " +
+                       $"Výsledek bude menší. Pøedstav si: máš {a} bonbonù a dáváš je do skupin po {b}. Kolik skupin dostaneš?";
+            if (wrong == b)
+                return $"Napsal jsi {b} – ale to je dìlitel, ne výsledek. " +
+                       $"Hledáme, kolikrát se {b} vejde do {a}. " +
+                       $"Zkus odpoèítávat: {a} \u2192 {a - b} \u2192 {Math.Max(a - 2 * b, 0)}... a poèítej kroky.";
+            if (wrong > 0 && wrong * b > a)
+                return $"Pøíliš velký výsledek. " +
+                       $"Zpìtná zkouška: {wrong} × {b} = {wrong * b}, ale máme jen {a}. Zkus menší èíslo.";
+            if (wrong > 0 && wrong * b < a)
+                return $"Pøíliš malý výsledek. " +
+                       $"Zpìtná zkouška: {wrong} × {b} = {wrong * b}, ale potøebujeme {a}. Zkus vìtší èíslo.";
+            if (wrong == 0)
+                return $"Nula by znamenala, že se {b} do {a} nevejde vùbec – ale vejde se! " +
+                       $"Pøedstav si: máš {a} sušenek a skládáš je do balíèkù po {b}. Kolik balíèkù naplníš?";
+            return $"Dìlení {a} ÷ {b}: hledáme, kolikrát se {b} vejde do {a}. " +
+                   $"Zkus odpoèítávat od {a}: {a} \u2192 {a - b} \u2192 {Math.Max(a - 2 * b, 0)}... a poèítej, kolik krokù jsi udìlal.";
+        }
+    }
+
     private async Task EndTrainingEarly()
     {
         Console.WriteLine(">>> Trénink ukonèen pøedèasnì!");
         await CompleteSessionAsync();
     }
+
+    // Pomocné metody pro správné èeské tvary pøi poèítání
+    private static string NSkupin(int n) => n == 1 ? "skupinu" : n <= 4 ? "skupiny" : "skupin";
+    private static string NCisel(int n)  => n == 1 ? "èíslo"    : n <= 4 ? "èísla"    : "èísel";
 
     private void GenerateMoreExercises()
     {
@@ -642,21 +789,103 @@ private TrainingSettings? currentSettings = null;
 
     .wrong-answer {
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 1rem;
-        margin-top: 0.5rem;
-        color: rgba(255, 255, 255, 0.9);
+        gap: 0.15rem;
+        margin-bottom: 0.5rem;
+        text-align: center;
     }
 
     .wrong-text {
-        font-size: 1rem;
+        font-size: 1.4rem;
+        font-weight: 600;
         color: #ff9800;
         text-decoration: line-through;
+        text-decoration-thickness: 2px;
     }
 
     .hint-text {
-        font-size: 0.9rem;
-        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.82rem;
+        color: rgba(255, 255, 255, 0.65);
+        letter-spacing: 0.02em;
+    }
+
+    .hint-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 0.4rem;
+    }
+
+    .btn-hint {
+        padding: 0.3rem 0.8rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.15);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 20px;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+
+    .btn-hint:hover {
+        background: rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-giveup {
+        padding: 0.3rem 0.8rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        background: rgba(255, 100, 80, 0.2);
+        color: rgba(255, 210, 200, 0.95);
+        border: 1px solid rgba(255, 120, 100, 0.4);
+        border-radius: 20px;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+
+    .btn-giveup:hover {
+        background: rgba(255, 100, 80, 0.35);
+    }
+
+    .hint-modal {
+        max-width: 440px;
+    }
+
+    .hint-dialog-text {
+        font-size: 1rem;
+        color: #333;
+        line-height: 1.65;
+        margin: 0.5rem 0 1.25rem;
+        text-align: left;
+    }
+
+    .solution-box {
+        background: linear-gradient(135deg, #f0f4ff, #e8f0fe);
+        border: 2px solid #667eea;
+        border-radius: 12px;
+        padding: 0.85rem 1.25rem;
+        margin-bottom: 1.25rem;
+        text-align: center;
+    }
+
+    .solution-label {
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #667eea;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 0.3rem;
+    }
+
+    .solution-text {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #333;
+        letter-spacing: 0.03em;
     }
 
     .correct-answer {
