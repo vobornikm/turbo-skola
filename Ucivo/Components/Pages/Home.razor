@@ -3,53 +3,71 @@
 @using TurboSkola.Services
 @inject IAuthService AuthService
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Turbo Škola: Zkoušej, chybuj, zvítěz!</PageTitle>
 
-<div class="home-container">
-    <h1>Cvičení z Matematiky</h1>
-    
-    <div class="training-options">
-        <div class="training-card">
-            <h2>Malá Násobilka</h2>
-            <p>Trénuj násobení a dělení s čísly 0-9</p>
-            <a href="/training/setup" class="btn btn-primary">Začít trénink</a>
+<HeadContent>
+    <meta name="description" content="Moderní trénink (nejen) malé násobilky pro celou základku. Bezpečné prostředí, kde chyba není problém, ale cesta k úspěchu. Začni trénovat hned!" />
+    <meta property="og:title" content="Turbo Škola: Zkoušej, chybuj, zvítěz!" />
+    <meta property="og:description" content="Moderní trénink (nejen) malé násobilky pro celou základku. Bezpečné prostředí, kde chyba není problém, ale cesta k úspěchu. Začni trénovat hned!" />
+</HeadContent>
+
+<div class="home-page">
+
+    <section class="hero-section">
+        <h1 class="hero-title">Turbo Škola – Tvoje cesta<br class="hero-br" /> k super vědomostem!</h1>
+        <p class="hero-subtitle">Procvičuj, trénuj a posouvej se dál – ve svém tempu, bez stresu a bez známek.</p>
+    </section>
+
+    <div class="turbik-card">
+        <div class="turbik-avatar">
+            <img src="/images/turbik/turbik.png" alt="Turbík" class="turbik-img" />
+            <span class="turbik-name">Turbík</span>
+        </div>
+        <div class="turbik-says">
+            <div class="says-label">💬 Turbík říká:</div>
+            <div class="speech-bubble">
+                <p>Ahoj! Jsem Turbík a vítám tě v Turbo Škole! 🚀</p>
+                <p>
+                    Tady se nezkouší a neznámkuje. Tady se <strong>trénuje na plný pecky!</strong>
+                    Chceš si procvičit násobilku, češtinu nebo angličtinu?
+                    Stačí si vybrat a jít na to.
+                </p>
+                <p>
+                    A pamatuj si moje nejdůležitější pravidlo:<br />
+                    <strong class="rule">💥 Zkoušej, chybuj, zvítěz!</strong><br />
+                    Když se spleteš, vůbec nic se neděje – prostě to zkusíme znova,
+                    dokud na to společně nekápnem. Tak co, zapneme turbo?
+                </p>
+            </div>
         </div>
     </div>
 
-    @if (isAuthenticated)
-    {
-        <div class="info-section authenticated">
-            <p>👋 Vítej, <strong>@currentEmail</strong>!</p>
-            <div class="user-buttons">
-                <a href="/stats" class="btn btn-outline">Moje statistiky</a>
-            </div>
-        </div>
-    }
-    else
-    {
-        <div class="info-section">
-            <p>Zaregistruj se a sleduj svůj progres!</p>
-            <p class="subtext">Bez registrace si můžeš stránky používat anonymně, ale nebudeš moci vidět svou historii a statistiky.</p>
-            <div class="home-auth-buttons">
-                <a href="/auth/login" class="btn btn-outline">Přihlášení</a>
-                <a href="/auth/register" class="btn btn-outline">Registrace</a>
-            </div>
-        </div>
-    }
+    <section class="home-cta">
+        @if (isAuthenticated)
+        {
+            <a href="/training/setup" class="btn-cta btn-cta-primary">🚀 Jdeme trénovat!</a>
+            <a href="/stats" class="btn-cta btn-cta-secondary">📊 Moje statistiky</a>
+        }
+        else
+        {
+            <p class="cta-hint">Trénovat můžeš hned a zdarma – bez registrace. Po registraci navíc získáš přehled statistik a sledování svého pokroku.</p>
+            <a href="/auth/register" class="btn-cta btn-cta-primary">🚀 Začít trénovat</a>
+            <a href="/auth/login" class="btn-cta btn-cta-secondary">Přihlásit se</a>
+        }
+    </section>
 
     <div class="legal-links">
         <a href="/legal/terms">Podmínky používání</a>
         <a href="/legal/privacy">Ochrana osobních údajů</a>
     </div>
+
 </div>
 
 @code {
     private bool isAuthenticated = false;
-    private string? currentEmail = null;
 
     protected override async Task OnInitializedAsync()
     {
-        // Počkat chvíli, aby se stihl provést auto-login v MainLayout
         await Task.Delay(100);
         UpdateAuthState();
     }
@@ -69,111 +87,216 @@
             if (AuthService != null)
             {
                 isAuthenticated = AuthService.IsAuthenticated;
-                currentEmail = AuthService.CurrentEmail;
                 StateHasChanged();
             }
         }
         catch
         {
             isAuthenticated = false;
-            currentEmail = null;
         }
     }
 }
 
 <style>
-    .home-container {
-        max-width: 600px;
-        margin: 2rem auto;
-        padding: 1rem;
+    .home-page {
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    /* ── HERO ── */
+    .hero-section {
         text-align: center;
+        padding: 0.5rem 0 0;
     }
 
-    .training-options {
-        margin: 2rem 0;
+    .hero-title {
+        font-size: clamp(1.75rem, 4.5vw, 2.6rem);
+        font-weight: 800;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        line-height: 1.25;
+        margin-bottom: 1.4rem;
     }
 
-    .training-card {
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 2rem;
-        margin-bottom: 1rem;
+    .hero-br { display: none; }
+
+    .hero-subtitle {
+        font-size: 1.05rem;
+        color: #666;
+        max-width: 500px;
+        margin: 0 auto;
+        line-height: 1.6;
     }
 
-    .training-card h2 {
-        margin-bottom: 0.5rem;
+    /* ── TURBÍK CARD ── */
+    .turbik-card {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.12);
+        border: 1px solid rgba(102, 126, 234, 0.12);
+        padding: 2rem 2.25rem;
+        display: flex;
+        gap: 2rem;
+        align-items: flex-start;
     }
 
-    .info-section {
-        margin: 2rem 0;
-        padding: 1rem;
-        background: #e8f5e9;
-        border-radius: 8px;
+    .turbik-avatar {
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.4rem;
     }
 
-    .info-section.authenticated {
-        background: #c8e6c9;
+    .turbik-img {
+        width: 170px;
+        height: auto;
+        filter: drop-shadow(0 6px 16px rgba(102, 126, 234, 0.22));
     }
 
-    .subtext {
-        font-size: 0.9rem;
-        color: #555;
-        margin-bottom: 1rem;
+    .turbik-name {
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #667eea;
     }
 
-    .home-auth-buttons,
-    .user-buttons {
+    /* Pravý sloupec */
+    .turbik-says {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        padding-top: 0.25rem;
+    }
+
+    .says-label {
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: #aaa;
+    }
+
+    /* Bublina – čistý styl s levým pruhem */
+    .speech-bubble {
+        background: #f7f8ff;
+        border-left: 4px solid #667eea;
+        border-radius: 0 16px 16px 16px;
+        padding: 1.25rem 1.5rem;
+        font-size: 1rem;
+        line-height: 1.75;
+        color: #333;
+    }
+
+    .speech-bubble p {
+        margin: 0 0 0.8rem;
+    }
+
+    .speech-bubble p:last-child {
+        margin-bottom: 0;
+    }
+
+    .rule {
+        display: inline-block;
+        color: #764ba2;
+        font-size: 1.05rem;
+        margin: 0.5rem 0;
+    }
+
+    /* ── CTA ── */
+    .home-cta {
         display: flex;
         gap: 1rem;
-        margin-top: 1rem;
         justify-content: center;
         flex-wrap: wrap;
     }
 
+    .btn-cta {
+        display: inline-block;
+        padding: 0.9rem 2.25rem;
+        border-radius: 2rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        text-decoration: none;
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .btn-cta:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 22px rgba(102, 126, 234, 0.3);
+        text-decoration: none;
+    }
+
+    .btn-cta-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: #fff;
+    }
+
+    .btn-cta-secondary {
+        background: #fff;
+        color: #667eea;
+        border: 2px solid #667eea;
+    }
+
+    .cta-hint {
+        width: 100%;
+        text-align: center;
+        margin: 0 0 0.5rem;
+        font-size: 0.88rem;
+        color: #999;
+        line-height: 1.5;
+    }
+
+    /* ── LEGAL ── */
+    .home-cta {
+        margin-bottom: 1.5rem;
+    }
+
     .legal-links {
-        margin-top: 2rem;
-        font-size: 0.9rem;
+        text-align: center;
+        font-size: 0.85rem;
     }
 
     .legal-links a {
         display: inline-block;
-        margin: 0 1rem;
-        color: #666;
+        margin: 0 0.75rem;
+        color: #bbb;
         text-decoration: none;
     }
 
     .legal-links a:hover {
-        color: #4CAF50;
+        color: #667eea;
     }
 
-    .btn {
-        display: inline-block;
-        padding: 0.75rem 1.5rem;
-        border-radius: 4px;
-        text-decoration: none;
-        font-weight: 500;
-        cursor: pointer;
-        border: none;
-    }
+    /* ── MOBILE ── */
+    @@media (max-width: 580px) {
+        .turbik-card {
+            flex-direction: column;
+            align-items: center;
+            padding: 1.5rem;
+        }
 
-    .btn-primary {
-        background-color: #4CAF50;
-        color: white;
-        font-size: 1.1rem;
-        padding: 1rem 2rem;
-    }
+        .turbik-img {
+            width: 130px;
+        }
 
-    .btn-primary:hover {
-        background-color: #45a049;
-    }
+        .turbik-says {
+            width: 100%;
+            padding-top: 0;
+        }
 
-    .btn-outline {
-        border: 2px solid #4CAF50;
-        color: #4CAF50;
-        background: white;
-    }
+        .speech-bubble {
+            border-radius: 16px;
+        }
 
-    .btn-outline:hover {
-        background-color: #f0f0f0;
+        .hero-br { display: inline; }
     }
 </style>

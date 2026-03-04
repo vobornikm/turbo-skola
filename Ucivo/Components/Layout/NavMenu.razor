@@ -1,4 +1,5 @@
 ﻿@using TurboSkola.Services
+@using TurboSkola.Utilities
 @using Microsoft.JSInterop
 @inject IAuthService AuthService
 @inject IProfileService ProfileService
@@ -699,32 +700,6 @@ private bool _locationChangedRegistered = false;
         _dotNetHelper?.Dispose();
     }
 
-    private string GetAvatarIcon(string icon)
-    {
-        return icon switch
-        {
-            "parent" => "&#x1F468;&#x200D;&#x1F469;&#x200D;&#x1F467;",
-            "child" => "&#x1F9D2;",
-            "fox" => "&#x1F98A;",
-            "bear" => "&#x1F43B;",
-            "cat" => "&#x1F431;",
-            "dog" => "&#x1F436;",
-            "rocket" => "&#x1F680;",
-            "ball" => "&#x26BD;",
-            "music" => "&#x1F3B5;",
-            "game" => "&#x1F3AE;",
-            "girl" => "&#x1F467;",
-            "unicorn" => "&#x1F984;",
-            "flower" => "&#x1F338;",
-            "butterfly" => "&#x1F98B;",
-            "bow" => "&#x1F380;",
-            "rainbow" => "&#x1F308;",
-            "star" => "&#x2B50;",
-            "palette" => "&#x1F3A8;",
-            "princess" => "&#x1F478;",
-            "dancer" => "&#x1F483;",
-            _ => "&#x1F464;"
-        };
-    }
+    private string GetAvatarIcon(string icon) => AvatarHelper.GetIcon(icon);
 }
 

@@ -76,7 +76,7 @@
             }
 
             <div class="exercise-display">
-                <div class="exercise-text">
+                <div class="exercise-text" @key="currentExerciseIndex">
                     @exercises[currentExerciseIndex].Exercise.DisplayText
                 </div>
             </div>
@@ -227,18 +227,21 @@ private TrainingSettings? currentSettings = null;
         _ = UpdateTimer();
     }
 
+    private int _lastFocusedExerciseIndex = -1;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Nekontrolovat focus pokud je session dokonèená (input už neexistuje)
-        if (isSessionCompleted)
-            return;
-            
-        if (firstRender && answerInput.Id != null)
+        if (isSessionCompleted) return;
+        if (answerInput.Id == null) return;
+        if (currentExerciseIndex >= exercises.Count) return;
+
+        // Focus pouze pøi pøechodu na nový pøíklad
+        // Ne pøi každém re-renderu (psani, špatná odpovìï...) - to zpùsobovalo blikání klavesnice
+        if (currentExerciseIndex != _lastFocusedExerciseIndex)
         {
-            await answerInput.FocusAsync();
-        }
-        else if (!firstRender && currentExerciseIndex < exercises.Count && answerInput.Id != null)
-        {
+            _lastFocusedExerciseIndex = currentExerciseIndex;
+            // Malá prodleva – iOS potøebuje èas na vykreslení pøed fokusem
+            if (!firstRender) await Task.Delay(50);
             await answerInput.FocusAsync();
         }
     }
@@ -349,6 +352,9 @@ private TrainingSettings? currentSettings = null;
             // Špatná odpovìï - vymazat pole pro nový pokus
             currentAnswer = "";
             StateHasChanged();
+            // Index se nezmìnil ? OnAfterRenderAsync re-focus pøeskoèí ? zavoláme ho pøímo
+            if (answerInput.Id != null)
+                await answerInput.FocusAsync();
         }
     }
 
@@ -526,9 +532,13 @@ private TrainingSettings? currentSettings = null;
 
 <style>
     .training-session-container {
+        /* position: fixed + top/left/width/height jsou nastaveny JS (trainingLayout.init)
+           pøesnì podle visualViewport – funguje korektnì pøi otevøení klávesnice na iOS i Android */
+        position: fixed;
+        top: 0;
+        left: 0;
         width: 100%;
-        height: 100vh;
-        height: var(--training-vh, 100dvh);
+        height: var(--training-vh, 100%); /* fallback než JS init probìhne */
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -585,7 +595,10 @@ private TrainingSettings? currentSettings = null;
         align-items: center;
         justify-content: center;
         width: 100%;
-        min-height: 0;
+        /* min-height drží výšku i pøi pøechodu na nový pøíklad
+           – zabrání CLS seskoku tlaèítek. Hodnota odpovídá 1 øádku textu pøíkladu
+           (font-size clamp(2.5rem,12vw,5rem) × line-height 1.2) */
+        min-height: clamp(3.2rem, 15vw, 6.5rem);
     }
 
     .exercise-text {
@@ -595,6 +608,12 @@ private TrainingSettings? currentSettings = null;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         text-align: center;
         line-height: 1.2;
+        animation: exampleIn 0.18s ease;
+    }
+
+    @@keyframes exampleIn {
+        from { opacity: 0; transform: scale(0.92); }
+        to   { opacity: 1; transform: scale(1); }
     }
 
     .input-container {

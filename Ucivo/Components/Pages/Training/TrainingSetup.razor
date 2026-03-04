@@ -24,12 +24,12 @@
             <h3>⏱️ Doba trvání</h3>
             <div class="segmented-control">
                 <button class="segment @(settings.DurationType == "Time" ? "active" : "")"
-                        @onclick='() => { settings.DurationType = "Time"; StateHasChanged(); }'>
+                        @onclick="SwitchToTime">
                     <span class="icon">⏰</span>
                     <span>Čas</span>
                 </button>
                 <button class="segment @(settings.DurationType == "Count" ? "active" : "")"
-                        @onclick='() => { settings.DurationType = "Count"; StateHasChanged(); }'>
+                        @onclick="SwitchToCount">
                     <span class="icon">📊</span>
                     <span>Počet</span>
                 </button>
@@ -70,6 +70,7 @@
                         <span>5</span>
                         <span>25</span>
                         <span>50</span>
+                        <span>75</span>
                         <span>100</span>
                     </div>
                 </div>
@@ -159,6 +160,10 @@
     private bool isInitialized = false;
     private bool isStarting = false;
 
+    // Zálohovací hodnoty pro každý režim zvlášť
+    private int timeValue = 5;
+    private int countValue = 20;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -166,6 +171,13 @@
             await Task.Delay(150);
             var profileId = ProfileService?.CurrentProfileId;
             settings = await SettingsService.GetProfileSettingsAsync(profileId);
+
+            // Inicializovat lokální zálohy podle uloženého režimu
+            if (settings.DurationType == "Time")
+                timeValue = settings.DurationValue;
+            else
+                countValue = settings.DurationValue;
+
             isInitialized = true;
             StateHasChanged();
         }
@@ -173,6 +185,22 @@
         {
             // Log error
         }
+    }
+
+    private void SwitchToTime()
+    {
+        countValue = settings.DurationValue;   // ulož aktuální počet
+        settings.DurationType = "Time";
+        settings.DurationValue = timeValue;    // obnov čas
+        StateHasChanged();
+    }
+
+    private void SwitchToCount()
+    {
+        timeValue = settings.DurationValue;    // ulož aktuální čas
+        settings.DurationType = "Count";
+        settings.DurationValue = countValue;   // obnov počet
+        StateHasChanged();
     }
 
     private void ToggleMultiplier(int num)
