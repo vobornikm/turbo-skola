@@ -58,7 +58,7 @@ public class TrainingService : ITrainingService
         session.CorrectFirstAttempt = correctFirstAttempt;
         session.TotalAttempts = totalAttempts;
         session.SkippedExamples = exercises.Count(e => e.SkippedByUser);
-        session.TotalExamples = exercises.Count(e => !e.SkippedByUser);
+        session.TotalExamples = exercises.Count;
 
         _dbContext.TrainingSessions.Update(session);
         

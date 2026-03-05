@@ -1,6 +1,6 @@
 @page "/training/session"
 @layout TrainingLayout
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using TurboSkola.Services
 @using TurboSkola.Utilities
 @using TurboSkola.Components.Layout
@@ -34,15 +34,15 @@
                 </div>
                 <div class="result-item">
                     <span class="result-label">Poèet pøíkladù:</span>
-                    <span class="result-value">@completedExercises</span>
+                    <span class="result-value">@totalExercisesSeen</span>
                 </div>
                 <div class="result-item">
                     <span class="result-label">Správné napoprvé:</span>
-                    <span class="result-value">@correctFirstAttempt / @completedExercises</span>
+                    <span class="result-value">@correctFirstAttempt / @totalExercisesSeen</span>
                 </div>
                 <div class="result-item">
                     <span class="result-label">Úspìšnost:</span>
-                    <span class="result-value">@(completedExercises > 0 ? Math.Round((double)correctFirstAttempt / completedExercises * 100) : 0)%</span>
+                    <span class="result-value">@(totalExercisesSeen > 0 ? Math.Round((double)correctFirstAttempt / totalExercisesSeen * 100) : 0)%</span>
                 </div>
             </div>
             <button class="btn-primary" @onclick="GoHome" disabled="@isSaving">
@@ -231,6 +231,7 @@ private Stopwatch stopwatch = new();
 private int elapsedSeconds = 0;
 private int durationSeconds = 0;
 private int completedExercises = 0;
+private int totalExercisesSeen = 0;
 private int correctFirstAttempt = 0;
 private string durationType = "Time";
 private bool showEndConfirm = false;
@@ -400,7 +401,8 @@ private TrainingSettings? currentSettings = null;
         }
         else
         {
-            // Špatná odpovìï - vymazat pole pro nový pokus
+            // Špatná odpovìï – zaznamenat ji a vymazat pole pro nový pokus
+            currentExercise.WrongAnswers.Add(answer);
             currentAnswer = "";
             StateHasChanged();
             // Index se nezmìnil ? OnAfterRenderAsync re-focus pøeskoèí ? zavoláme ho pøímo
@@ -441,10 +443,10 @@ private TrainingSettings? currentSettings = null;
         isSaving = true;
         StateHasChanged();
         
-        // Pøipravit data pro uložení
+        // Pøipravit data pro uložení – zahrnout i pøeskoèené a dané-se-podat pøíklady
         var exercisesToSave = new List<Data.Models.SessionExercise>();
-        
-        foreach (var ex in exercises.Where(e => !e.IsSkipped && e.Attempts > 0))
+
+        foreach (var ex in exercises.Where(e => e.Attempts > 0 || e.IsSkipped || e.GaveUp))
         {
             exercisesToSave.Add(new Data.Models.SessionExercise
             {
@@ -456,9 +458,16 @@ private TrainingSettings? currentSettings = null;
                 TimeSpentSeconds = ex.TimeSpentSeconds,
                 NumberOfAttempts = ex.Attempts,
                 IsCorrect = ex.IsCorrect,
-                SkippedByUser = ex.IsSkipped
+                SkippedByUser = ex.IsSkipped,
+                GaveUp = ex.GaveUp,
+                HintShown = ex.HintShown,
+                WrongAnswers = ex.WrongAnswers.Count > 0
+                    ? string.Join(",", ex.WrongAnswers)
+                    : null
             });
         }
+
+        totalExercisesSeen = exercisesToSave.Count;
         
         // Batch save všech výsledkù najednou
         try
@@ -541,7 +550,12 @@ private TrainingSettings? currentSettings = null;
         await SkipExercise();
     }
 
-    private void ShowHintDialog() { showHintDialog = true; }
+    private void ShowHintDialog()
+    {
+        showHintDialog = true;
+        if (currentExerciseIndex < exercises.Count)
+            exercises[currentExerciseIndex].HintShown = true;
+    }
     private void CloseHintDialog() { showHintDialog = false; }
     private void ShowGiveUpDialog() { showGiveUpDialog = true; }
     private void CloseGiveUpDialog() { showGiveUpDialog = false; }
@@ -551,7 +565,7 @@ private TrainingSettings? currentSettings = null;
         showGiveUpDialog = false;
         var currentExercise = exercises[currentExerciseIndex];
         currentExercise.TimeSpentSeconds = (int)(DateTime.UtcNow - currentExercise.StartTime).TotalSeconds;
-        // IsSkipped zùstane false – pøíklad se uloží do statistik jako nevyøešený (s poètem pokusù)
+        currentExercise.GaveUp = true;
 
         currentExerciseIndex++;
         currentAnswer = "";
@@ -675,6 +689,13 @@ private TrainingSettings? currentSettings = null;
         
         Console.WriteLine($">>> Celkem pøíkladù: {exercises.Count}");
     }
+
+    private static string PrikladText(int n) => n switch
+    {
+        1 => "pøíklad",
+        >= 2 and <= 4 => "pøíklady",
+        _ => "pøíkladù"
+    };
 }
 
 <style>

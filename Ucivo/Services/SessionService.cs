@@ -11,6 +11,9 @@ public class SessionExerciseData
     public int Attempts { get; set; }
     public bool IsCorrect { get; set; }
     public bool IsSkipped { get; set; }
+    public bool GaveUp { get; set; }
+    public bool HintShown { get; set; }
+    public List<int> WrongAnswers { get; set; } = new();
     public int TimeSpentSeconds { get; set; }
     public DateTime StartTime { get; set; }
 }

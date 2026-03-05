@@ -60,7 +60,7 @@
                 <div class="slider-container">
                     <div class="slider-header">
                         <span class="slider-label">Počet příkladů</span>
-                        <span class="slider-value">@settings.DurationValue příkladů</span>
+                        <span class="slider-value">@settings.DurationValue @PrikladText(settings.DurationValue)</span>
                     </div>
                     <input type="range" class="modern-slider"
                            min="5" max="100" step="5"
@@ -273,6 +273,13 @@
             isStarting = false;
         }
     }
+
+    private static string PrikladText(int n) => n switch
+    {
+        1 => "příklad",
+        >= 2 and <= 4 => "příklady",
+        _ => "příkladů"
+    };
 }
 
 <style>
