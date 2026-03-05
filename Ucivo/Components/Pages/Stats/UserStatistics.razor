@@ -196,11 +196,14 @@ else
     private List<SessionExercise>? expandedExercises = null;
     private bool loadingExercises = false;
     private List<ProblematicExercise>? problematicExercises = null;
+    private ExerciseSortOrder exerciseSortOrder = ExerciseSortOrder.Default;
 
     private bool showDeleteDialog = false;
     private int? deletingSessionId = null;
     private bool pinVerifiedForDelete = false;
     private string? deletePinError;
+
+    private enum ExerciseSortOrder { Default, ByErrors, ByTime }
 
     private class ProblematicExercise
     {
@@ -362,9 +365,25 @@ else
                                     }
                                     else if (expandedExercises != null && expandedExercises.Any())
                                     {
-                                        <h4>Detail příkladů:</h4>
+                                        <div class="exercises-header">
+                                            <h4>Detail příkladů:</h4>
+                                            <div class="sort-buttons">
+                                                <button class="sort-btn @(exerciseSortOrder == ExerciseSortOrder.Default ? "active" : "")"
+                                                        @onclick="() => { exerciseSortOrder = ExerciseSortOrder.Default; StateHasChanged(); }">
+                                                    📋 Pořadí
+                                                </button>
+                                                <button class="sort-btn @(exerciseSortOrder == ExerciseSortOrder.ByErrors ? "active" : "")"
+                                                        @onclick="() => { exerciseSortOrder = ExerciseSortOrder.ByErrors; StateHasChanged(); }">
+                                                    ⚠️ Chyby
+                                                </button>
+                                                <button class="sort-btn @(exerciseSortOrder == ExerciseSortOrder.ByTime ? "active" : "")"
+                                                        @onclick="() => { exerciseSortOrder = ExerciseSortOrder.ByTime; StateHasChanged(); }">
+                                                    ⏱️ Čas
+                                                </button>
+                                            </div>
+                                        </div>
                                         <div class="exercises-grid">
-                                            @foreach (var exercise in expandedExercises.OrderBy(e => e.ExerciseIndex))
+                                            @foreach (var exercise in SortedExercises())
                                             {
                                                 string exerciseClass;
                                                 if (exercise.SkippedByUser)
@@ -375,54 +394,55 @@ else
                                                     exerciseClass = "exercise-wrong";
                                                 else if (exercise.NumberOfAttempts == 1)
                                                     exerciseClass = "exercise-correct";
-                                                else if (exercise.NumberOfAttempts <= 3)
-                                                    exerciseClass = "exercise-medium";
                                                 else
-                                                    exerciseClass = "exercise-wrong";
+                                                    exerciseClass = "exercise-correct-late";
 
                                                 var wrongAnswersList = string.IsNullOrEmpty(exercise.WrongAnswers)
                                                     ? new List<string>()
                                                     : exercise.WrongAnswers.Split(',').ToList();
 
                                                 <div class="exercise-item @exerciseClass">
-                                                    <div class="exercise-header">
-                                                        <div class="exercise-number">#@(exercise.ExerciseIndex + 1)</div>
-                                                        <div class="exercise-text">@exercise.ExerciseText = ?</div>
-                                                        <div class="exercise-badges">
-                                                            @if (exercise.HintShown)
-                                                            {
-                                                                <span class="badge badge-hint" title="Zobrazil nápovědu">💡 Nápověda</span>
-                                                            }
-                                                        </div>
-                                                    </div>
-                                                    <div class="exercise-outcome">
+                                                    <span class="exercise-number">#@(exercise.ExerciseIndex + 1)</span>
+                                                    <span class="exercise-text">@exercise.ExerciseText = ?</span>
+                                                    <div class="exercise-status">
+                                                        @if (exercise.HintShown)
+                                                        {
+                                                            <span class="badge badge-hint" title="Zobrazil nápovědu">💡</span>
+                                                        }
                                                         @if (exercise.SkippedByUser)
                                                         {
                                                             <span class="outcome-label outcome-skipped">⊘ Přeskočeno</span>
                                                         }
                                                         else if (exercise.GaveUp)
                                                         {
-                                                            <span class="outcome-label outcome-gaveup">🏳 Dal se podat <span class="correct-answer-inline">(správně: @exercise.CorrectAnswer)</span></span>
+                                                            <span class="outcome-label outcome-gaveup">🏳 Dal se podat</span>
                                                         }
                                                         else if (exercise.IsCorrect)
                                                         {
-                                                            <span class="outcome-label outcome-correct">✓ @exercise.UserAnswer</span>
+                                                            <span class="outcome-label @(exercise.NumberOfAttempts == 1 ? "outcome-correct" : "outcome-correct-late")">✓ Správně</span>
                                                         }
                                                         else
                                                         {
-                                                            <span class="outcome-label outcome-wrong">✗ @exercise.UserAnswer <span class="correct-answer-inline">(správně: @exercise.CorrectAnswer)</span></span>
+                                                            <span class="outcome-label outcome-wrong">✗ Špatně</span>
                                                         }
                                                     </div>
-                                                    @if (wrongAnswersList.Any())
-                                                    {
-                                                        <div class="wrong-answers-trail">
-                                                            <span class="wrong-answers-label">Špatné pokusy:</span>
+                                                    <div class="exercise-detail">
+                                                        @if (wrongAnswersList.Any())
+                                                        {
                                                             @foreach (var wrong in wrongAnswersList)
                                                             {
                                                                 <span class="wrong-answer-chip">@wrong</span>
                                                             }
-                                                        </div>
-                                                    }
+                                                            @if (exercise.IsCorrect)
+                                                            {
+                                                                <span class="correct-value">✓ @exercise.CorrectAnswer</span>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="correct-value">✓ @exercise.CorrectAnswer</span>
+                                                        }
+                                                    </div>
                                                     <div class="exercise-meta">
                                                         <span class="exercise-attempts">@exercise.NumberOfAttempts× pokus</span>
                                                         <span class="exercise-time">@exercise.TimeSpentSeconds s</span>
@@ -450,10 +470,12 @@ else
         {
             expandedSessionId = null;
             expandedExercises = null;
+            exerciseSortOrder = ExerciseSortOrder.Default;
         }
         else
         {
             expandedSessionId = sessionId;
+            exerciseSortOrder = ExerciseSortOrder.Default;
             loadingExercises = true;
             StateHasChanged();
 
@@ -471,6 +493,17 @@ else
             }
         }
     }
+
+    private IEnumerable<SessionExercise> SortedExercises() => exerciseSortOrder switch
+    {
+        ExerciseSortOrder.ByErrors => (expandedExercises ?? [])
+            .OrderBy(e => e.SkippedByUser ? 0 : e.GaveUp ? 1 : !e.IsCorrect ? 2 : 3)
+            .ThenBy(e => e.ExerciseIndex),
+        ExerciseSortOrder.ByTime => (expandedExercises ?? [])
+            .OrderByDescending(e => e.TimeSpentSeconds),
+        _ => (expandedExercises ?? [])
+            .OrderBy(e => e.ExerciseIndex)
+    };
 
     private RenderFragment RenderProblematicExercises(List<TrainingSession> sessions)
     {
@@ -789,8 +822,46 @@ else
     }
 
     .session-detail h4 {
-        margin: 0 0 1rem 0;
+        margin: 0;
         color: #333;
+    }
+
+    .exercises-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .sort-buttons {
+        display: flex;
+        gap: 0.4rem;
+    }
+
+    .sort-btn {
+        padding: 0.3rem 0.75rem;
+        border: 1px solid #d0d0d0;
+        border-radius: 20px;
+        background: white;
+        color: #555;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+
+    .sort-btn:hover {
+        border-color: #667eea;
+        color: #667eea;
+    }
+
+    .sort-btn.active {
+        background: #667eea;
+        border-color: #667eea;
+        color: white;
+        font-weight: 600;
     }
 
     .session-actions {
@@ -803,52 +874,81 @@ else
 
     .exercises-grid {
         display: grid;
-        gap: 0.5rem;
+        gap: 0.4rem;
     }
 
     .exercise-item {
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-        padding: 0.75rem;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        grid-template-rows: auto auto;
+        column-gap: 0.75rem;
+        row-gap: 0.2rem;
+        align-items: center;
+        padding: 0.65rem 0.75rem;
         background: white;
         border-radius: 4px;
         border-left: 4px solid #ddd;
     }
 
-    .exercise-header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-    }
-
     .exercise-number {
+        grid-column: 1;
+        grid-row: 1 / 3;
+        align-self: center;
         font-weight: 600;
-        color: #666;
+        color: #888;
+        font-size: 0.8rem;
         white-space: nowrap;
     }
 
     .exercise-text {
+        grid-column: 2;
+        grid-row: 1;
         font-weight: 500;
-        font-size: 1.1rem;
-        flex: 1;
+        font-size: 1rem;
     }
 
-    .exercise-badges {
+    .exercise-status {
+        grid-column: 3;
+        grid-row: 1;
         display: flex;
+        align-items: center;
+        justify-content: flex-end;
         gap: 0.35rem;
+        white-space: nowrap;
+    }
+
+    .exercise-detail {
+        grid-column: 2;
+        grid-row: 2;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
         flex-wrap: wrap;
+    }
+
+    .correct-value {
+        color: #48bb78;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .exercise-meta {
+        grid-column: 3;
+        grid-row: 2;
+        display: flex;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        color: #999;
+        white-space: nowrap;
+        justify-content: flex-end;
     }
 
     .badge {
         display: inline-flex;
         align-items: center;
-        gap: 0.2rem;
-        padding: 0.15rem 0.5rem;
-        border-radius: 10px;
-        font-size: 0.75rem;
-        font-weight: 600;
+        padding: 0.1rem 0.35rem;
+        border-radius: 8px;
+        font-size: 0.8rem;
     }
 
     .badge-hint {
@@ -856,15 +956,16 @@ else
         color: #c05621;
     }
 
-    .exercise-outcome {
-        font-size: 0.95rem;
-    }
-
     .outcome-label {
-        font-weight: 500;
+        font-weight: 600;
+        font-size: 0.85rem;
     }
 
     .outcome-correct {
+        color: #48bb78;
+    }
+
+    .outcome-correct-late {
         color: #48bb78;
     }
 
@@ -880,25 +981,6 @@ else
         color: #9f7aea;
     }
 
-    .correct-answer-inline {
-        font-weight: 400;
-        color: #666;
-        font-size: 0.88em;
-    }
-
-    .wrong-answers-trail {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        flex-wrap: wrap;
-        font-size: 0.85rem;
-    }
-
-    .wrong-answers-label {
-        color: #666;
-        font-weight: 500;
-    }
-
     .wrong-answer-chip {
         display: inline-block;
         background: rgba(245, 101, 101, 0.12);
@@ -907,13 +989,6 @@ else
         padding: 0.1rem 0.4rem;
         font-size: 0.8rem;
         font-weight: 600;
-    }
-
-    .exercise-meta {
-        display: flex;
-        gap: 1rem;
-        font-size: 0.82rem;
-        color: #888;
     }
 
     @@media (max-width: 768px) {
@@ -956,7 +1031,17 @@ else
         }
 
         .exercise-item {
-            padding: 0.6rem;
+            padding: 0.5rem 0.6rem;
+            column-gap: 0.5rem;
+        }
+
+        .exercise-text {
+            font-size: 0.9rem;
+        }
+
+        .exercise-status,
+        .exercise-meta {
+            font-size: 0.75rem;
         }
 
         .child-stats-grid {
@@ -979,7 +1064,12 @@ else
 
     .exercise-item.exercise-correct {
         border-left-color: #48bb78;
-        background: rgba(72, 187, 120, 0.05);
+        background: rgba(72, 187, 120, 0.08);
+    }
+
+    .exercise-item.exercise-correct-late {
+        border-left-color: #9ae6b4;
+        background: rgba(154, 230, 180, 0.30);
     }
 
     .exercise-item.exercise-medium {
