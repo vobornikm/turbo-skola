@@ -9,6 +9,7 @@ public class UserSettings
     public string IncludedMultipliers { get; set; } = "[0,1,2,3,4,5,6,7,8,9,10]"; // JSON pole
     public bool IncludeMultiplication { get; set; } = true;
     public bool IncludeDivision { get; set; } = false;
+    public string? AddSubSettingsJson { get; set; }
     public DateTime LastModified { get; set; }
 
     // Relationships

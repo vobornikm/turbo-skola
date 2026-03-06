@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using TurboSkola.Data;
 using TurboSkola.Data.Models;
 using TurboSkola.Utilities;
@@ -7,8 +8,10 @@ namespace TurboSkola.Services;
 public interface ITrainingService
 {
     Task<TrainingSession> CreateSessionAsync(int? profileId, List<int> multipliers, bool includeMultiplication, bool includeDivision, int durationSeconds, int? exerciseCount);
+    Task<TrainingSession> CreateSessionAsync(int? profileId, int durationSeconds, int? exerciseCount);
     Task CompleteSessionAsync(int sessionId, int correctFirstAttempt, int totalAttempts, List<SessionExercise> exercises);
     Task<TrainingSession?> GetSessionAsync(int sessionId);
+    Task<List<TrainingType>> GetTrainingTypesAsync();
 }
 
 public class TrainingService : ITrainingService
@@ -46,6 +49,39 @@ public class TrainingService : ITrainingService
         await _dbContext.SaveChangesAsync();
 
         return session;
+    }
+
+    public async Task<TrainingSession> CreateSessionAsync(
+        int? profileId,
+        int durationSeconds,
+        int? exerciseCount)
+    {
+        var session = new TrainingSession
+        {
+            ProfileId = profileId,
+            AnonymousId = profileId == null ? Guid.NewGuid().ToString() : null,
+            StartTime = DateTime.UtcNow,
+            EndTime = DateTime.UtcNow.AddSeconds(durationSeconds),
+            TotalExamples = exerciseCount ?? (durationSeconds / 30),
+            CorrectFirstAttempt = 0,
+            TotalAttempts = 0,
+            SkippedExamples = 0
+        };
+
+        _dbContext.TrainingSessions.Add(session);
+        await _dbContext.SaveChangesAsync();
+
+        return session;
+    }
+
+    public async Task<List<TrainingType>> GetTrainingTypesAsync()
+    {
+        return await _dbContext.TrainingTypes
+            .Include(t => t.Subject)
+            .Where(t => t.IsActive)
+            .OrderBy(t => t.Subject.DisplayOrder)
+            .ThenBy(t => t.DisplayOrder)
+            .ToListAsync();
     }
 
     public async Task CompleteSessionAsync(int sessionId, int correctFirstAttempt, int totalAttempts, List<SessionExercise> exercises)

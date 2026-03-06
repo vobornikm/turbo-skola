@@ -36,14 +36,15 @@ public interface ISessionService
     void ClearCurrentSession();
     TrainingSettings? GetCurrentSettings();
     void SetCurrentSettings(TrainingSettings settings);
+    AddSubTrainingSettings? GetCurrentAddSubSettings();
+    void SetCurrentAddSubSettings(AddSubTrainingSettings settings);
 }
 
 public class SessionService : ISessionService
 {
-    // Pro Singleton použijeme "last" - poslední nastavení (jednoduché øešení pro single-user scénáø)
-    // V produkci by bylo lepší použít per-circuit nebo per-user storage
     private SessionState? _lastSession;
     private TrainingSettings? _lastSettings;
+    private AddSubTrainingSettings? _lastAddSubSettings;
     private readonly object _lock = new();
 
     public SessionState? GetCurrentSession()
@@ -83,6 +84,22 @@ public class SessionService : ISessionService
         lock (_lock)
         {
             _lastSettings = settings;
+        }
+    }
+
+    public AddSubTrainingSettings? GetCurrentAddSubSettings()
+    {
+        lock (_lock)
+        {
+            return _lastAddSubSettings;
+        }
+    }
+
+    public void SetCurrentAddSubSettings(AddSubTrainingSettings settings)
+    {
+        lock (_lock)
+        {
+            _lastAddSubSettings = settings;
         }
     }
 }

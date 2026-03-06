@@ -497,7 +497,10 @@ else
     private IEnumerable<SessionExercise> SortedExercises() => exerciseSortOrder switch
     {
         ExerciseSortOrder.ByErrors => (expandedExercises ?? [])
-            .OrderBy(e => e.SkippedByUser ? 0 : e.GaveUp ? 1 : !e.IsCorrect ? 2 : 3)
+            .OrderBy(e => e.SkippedByUser ? 0
+                        : e.GaveUp ? 1
+                        : (!string.IsNullOrEmpty(e.WrongAnswers) || !e.IsCorrect) ? 2
+                        : 3)
             .ThenBy(e => e.ExerciseIndex),
         ExerciseSortOrder.ByTime => (expandedExercises ?? [])
             .OrderByDescending(e => e.TimeSpentSeconds),

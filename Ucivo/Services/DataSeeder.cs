@@ -11,13 +11,21 @@ public class DataSeeder
 {
     public static async Task SeedAsync(UcivoDbContext context)
     {
-        // Pokud už existují data, pøeskoèit
-        if (await context.SchoolLevels.AnyAsync())
+        // Hlavní seed (jednorázový pøi prvním spuštìní)
+        if (!await context.SchoolLevels.AnyAsync())
         {
-            return;
+            await SeedInitialDataAsync(context);
         }
 
-        // 1. STUPNÌ ŠKOLY
+        // Vždy opravit ikony (øeší encoding problémy z pùvodního seedu)
+        await SeedFixIconsAsync(context);
+
+        // Vždy zkontrolovat nové tréninky (pøidává chybìjící typy)
+        await SeedAddSubTrainingAsync(context);
+    }
+
+    private static async Task SeedInitialDataAsync(UcivoDbContext context)
+    {
         var primary1 = new SchoolLevel
         {
             Name = "1. stupeò ZŠ",
@@ -127,6 +135,73 @@ public class DataSeeder
         };
 
         context.TrainingTypes.Add(multiplicationTraining);
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedFixIconsAsync(UcivoDbContext context)
+    {
+        // Oprava ikon pøedmìtù — Unicode escape = bezpeèné pøed encoding problémy
+        var subjectIcons = new Dictionary<string, string>
+        {
+            { "MATH",  "\U0001F9EE" }, // ??
+            { "CZECH", "\U0001F4DA" }  // ??
+        };
+
+        var trainingIcons = new Dictionary<string, string>
+        {
+            { "SMALL_MULTIPLICATION", "\u2716\uFE0F" }, // ??
+            { "ADD_SUB_100",          "\u2795"  }  // ?
+        };
+
+        bool changed = false;
+
+        var subjects = await context.Subjects.Where(s => subjectIcons.Keys.Contains(s.Code)).ToListAsync();
+        foreach (var s in subjects)
+        {
+            if (subjectIcons.TryGetValue(s.Code, out var icon) && s.Icon != icon)
+            {
+                s.Icon = icon;
+                changed = true;
+            }
+        }
+
+        var trainings = await context.TrainingTypes.Where(t => trainingIcons.Keys.Contains(t.Code)).ToListAsync();
+        foreach (var t in trainings)
+        {
+            if (trainingIcons.TryGetValue(t.Code, out var icon) && t.Icon != icon)
+            {
+                t.Icon = icon;
+                changed = true;
+            }
+        }
+
+        if (changed)
+            await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedAddSubTrainingAsync(UcivoDbContext context)
+    {
+        if (await context.TrainingTypes.AnyAsync(t => t.Code == "ADD_SUB_100"))
+            return;
+
+        var mathematics = await context.Subjects.FirstOrDefaultAsync(s => s.Code == "MATH");
+        if (mathematics == null) return;
+
+        var addSubTraining = new TrainingType
+        {
+            SubjectId = mathematics.SubjectId,
+            Name = "Sèítání a odèítání do 100",
+            Code = "ADD_SUB_100",
+            Description = "Trénink sèítání a odèítání èísel do 100 pro 2. tøídu ZŠ",
+            Icon = "?",
+            GeneratorClassName = "TurboSkola.TrainingGenerators.AddSubExerciseGenerator",
+            MinGradeNumber = 1,
+            MaxGradeNumber = 4,
+            DisplayOrder = 2,
+            IsActive = true
+        };
+
+        context.TrainingTypes.Add(addSubTraining);
         await context.SaveChangesAsync();
     }
 }

@@ -411,6 +411,9 @@ namespace TurboSkola.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SettingId"));
 
+                    b.Property<string>("AddSubSettingsJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("DurationType")
                         .IsRequired()
                         .HasMaxLength(10)

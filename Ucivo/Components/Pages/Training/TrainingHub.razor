@@ -1,0 +1,229 @@
+@page "/training"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@using TurboSkola.Data.Models
+@inject ITrainingService TrainingService
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Tréninky - Turbo Škola</PageTitle>
+
+<div class="hub-container">
+    <div class="hub-header">
+        <h1>🚀 Vyber si trénink</h1>
+        <p class="hub-subtitle">Procvičuj různé předměty a posouvej se dál</p>
+    </div>
+
+    @if (groupedTrainings == null)
+    {
+        <div class="hub-loading">
+            <p>Načítám tréninky...</p>
+        </div>
+    }
+    else if (groupedTrainings.Count == 0)
+    {
+        <div class="hub-empty">
+            <p>Zatím zde nejsou žádné tréninky. Brzy přidáme!</p>
+        </div>
+    }
+    else
+    {
+        @foreach (var (subject, trainings) in groupedTrainings)
+        {
+            <div class="subject-section">
+                <div class="subject-header" style="border-left: 5px solid @subject.Color">
+                    <span class="subject-icon">@GetSubjectIcon(subject.Code)</span>
+                    <h2>@subject.Name</h2>
+                </div>
+                <div class="trainings-grid">
+                    @foreach (var training in trainings)
+                    {
+                        <div class="training-card" @onclick="() => NavigateToSetup(training.Code)" style="--card-color: @subject.Color">
+                            <div class="training-card-icon">@GetTrainingIcon(training.Code)</div>
+                            <div class="training-card-body">
+                                <h3>@training.Name</h3>
+                                <p>@training.Description</p>
+                                <span class="training-grade">@training.MinGradeNumber.–@training.MaxGradeNumber. třída</span>
+                            </div>
+                            <div class="training-card-arrow">›</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<(Subject Subject, List<TrainingType> Trainings)>? groupedTrainings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var types = await TrainingService.GetTrainingTypesAsync();
+        groupedTrainings = types
+            .GroupBy(t => t.Subject.SubjectId)
+            .Select(g => (g.First().Subject, g.ToList()))
+            .ToList();
+    }
+
+    private void NavigateToSetup(string code)
+    {
+        var url = code switch
+        {
+            "SMALL_MULTIPLICATION" => "/training/setup",
+            "ADD_SUB_100" => "/training/addsub/setup",
+            _ => "/training"
+        };
+        Navigation.NavigateTo(url);
+    }
+
+    private static string GetSubjectIcon(string code) => code switch
+    {
+        "MATH"  => "\U0001F9EE", // 🧮
+        "CZECH" => "\U0001F4DA", // 📚
+        _       => "\U0001F4D6"  // 📖
+    };
+
+    private static string GetTrainingIcon(string code) => code switch
+    {
+        "SMALL_MULTIPLICATION" => "\u2716\uFE0F", // ✖️
+        "ADD_SUB_100"          => "\u2795",        // ➕
+        _                      => "\U0001F4DD"      // 📝
+    };
+}
+
+<style>
+    .hub-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+        min-height: 100vh;
+    }
+
+    .hub-header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+    }
+
+    .hub-header h1 {
+        font-size: 2.2rem;
+        margin: 0 0 0.5rem 0;
+        color: #2d3748;
+    }
+
+    .hub-subtitle {
+        color: #718096;
+        font-size: 1.1rem;
+        margin: 0;
+    }
+
+    .hub-loading, .hub-empty {
+        text-align: center;
+        color: #718096;
+        padding: 3rem;
+    }
+
+    .subject-section {
+        margin-bottom: 2.5rem;
+    }
+
+    .subject-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding-left: 1rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .subject-icon {
+        font-size: 1.75rem;
+    }
+
+    .subject-header h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        color: #2d3748;
+    }
+
+    .trainings-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .training-card {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        background: white;
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        cursor: pointer;
+        border: 2px solid transparent;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+        transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+    }
+
+    .training-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+        border-color: var(--card-color, #667eea);
+    }
+
+    .training-card-icon {
+        font-size: 2.5rem;
+        flex-shrink: 0;
+    }
+
+    .training-card-body {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .training-card-body h3 {
+        margin: 0 0 0.25rem 0;
+        font-size: 1.15rem;
+        color: #2d3748;
+    }
+
+    .training-card-body p {
+        margin: 0 0 0.5rem 0;
+        color: #718096;
+        font-size: 0.9rem;
+    }
+
+    .training-grade {
+        display: inline-block;
+        background: #edf2f7;
+        color: #4a5568;
+        border-radius: 20px;
+        padding: 0.15rem 0.65rem;
+        font-size: 0.8rem;
+    }
+
+    .training-card-arrow {
+        font-size: 1.75rem;
+        color: #cbd5e0;
+        font-weight: bold;
+        flex-shrink: 0;
+    }
+
+    .training-card:hover .training-card-arrow {
+        color: var(--card-color, #667eea);
+    }
+
+    @@media (max-width: 480px) {
+        .hub-header h1 {
+            font-size: 1.6rem;
+        }
+
+        .training-card {
+            padding: 1rem;
+            gap: 1rem;
+        }
+
+        .training-card-icon {
+            font-size: 2rem;
+        }
+    }
+</style>
