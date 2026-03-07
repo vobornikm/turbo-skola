@@ -12,6 +12,7 @@ public class TrainingSession
     public int CorrectFirstAttempt { get; set; }
     public int TotalAttempts { get; set; }
     public int SkippedExamples { get; set; }
+    public string? TrainingTypeCode { get; set; } // "SMALL_MULTIPLICATION", "ADD_SUB_100", ...
 
     // Relationships
     public UserProfile? Profile { get; set; }

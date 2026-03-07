@@ -8,7 +8,7 @@ namespace TurboSkola.Services;
 public interface ITrainingService
 {
     Task<TrainingSession> CreateSessionAsync(int? profileId, List<int> multipliers, bool includeMultiplication, bool includeDivision, int durationSeconds, int? exerciseCount);
-    Task<TrainingSession> CreateSessionAsync(int? profileId, int durationSeconds, int? exerciseCount);
+    Task<TrainingSession> CreateSessionAsync(int? profileId, int durationSeconds, int? exerciseCount, string? trainingTypeCode = null);
     Task CompleteSessionAsync(int sessionId, int correctFirstAttempt, int totalAttempts, List<SessionExercise> exercises);
     Task<TrainingSession?> GetSessionAsync(int sessionId);
     Task<List<TrainingType>> GetTrainingTypesAsync();
@@ -42,7 +42,8 @@ public class TrainingService : ITrainingService
             TotalExamples = exerciseCount ?? (durationSeconds / 30),
             CorrectFirstAttempt = 0,
             TotalAttempts = 0,
-            SkippedExamples = 0
+            SkippedExamples = 0,
+            TrainingTypeCode = "SMALL_MULTIPLICATION"
         };
 
         _dbContext.TrainingSessions.Add(session);
@@ -54,7 +55,8 @@ public class TrainingService : ITrainingService
     public async Task<TrainingSession> CreateSessionAsync(
         int? profileId,
         int durationSeconds,
-        int? exerciseCount)
+        int? exerciseCount,
+        string? trainingTypeCode = null)
     {
         var session = new TrainingSession
         {
@@ -65,7 +67,8 @@ public class TrainingService : ITrainingService
             TotalExamples = exerciseCount ?? (durationSeconds / 30),
             CorrectFirstAttempt = 0,
             TotalAttempts = 0,
-            SkippedExamples = 0
+            SkippedExamples = 0,
+            TrainingTypeCode = trainingTypeCode
         };
 
         _dbContext.TrainingSessions.Add(session);

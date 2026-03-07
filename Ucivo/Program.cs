@@ -13,7 +13,8 @@ builder.Services.AddRazorComponents()
 
 // Configure DbContext
 builder.Services.AddDbContext<UcivoDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning)));
 
 // Register services
 builder.Services.AddScoped<IUserService, UserService>();

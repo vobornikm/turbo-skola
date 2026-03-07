@@ -40,14 +40,14 @@ else
             <div class="tabs-container">
                 <div class="tabs">
                     <button class="tab @(selectedTab == "overview" ? "active" : "")"
-                            @onclick='() => selectedTab = "overview"'>
+                            @onclick='() => SwitchTab("overview")'>
                         &#x1F4CA; Přehled
                     </button>
                     @foreach (var child in childProfiles)
                     {
                         <button class="tab @(selectedTab == child.ProfileId.ToString() ? "active" : "")"
                                 style="border-bottom: 3px solid @(selectedTab == child.ProfileId.ToString() ? child.AvatarColor : "transparent")"
-                                @onclick='() => selectedTab = child.ProfileId.ToString()'>
+                                @onclick='() => SwitchTab(child.ProfileId.ToString())'>
                             @((MarkupString)GetAvatarIcon(child.AvatarIcon)) @child.ProfileName
                         </button>
                     }
@@ -202,8 +202,45 @@ else
     private int? deletingSessionId = null;
     private bool pinVerifiedForDelete = false;
     private string? deletePinError;
+    private HashSet<string> selectedTrainingTypes = new();
 
     private enum ExerciseSortOrder { Default, ByErrors, ByTime }
+
+    private IEnumerable<string> GetAvailableTypes(List<TrainingSession> sessions) =>
+        sessions.Select(s => s.TrainingTypeCode ?? "").Distinct().OrderBy(c => c);
+
+    private void ToggleTypeFilter(string code)
+    {
+        if (!selectedTrainingTypes.Add(code))
+            selectedTrainingTypes.Remove(code);
+    }
+
+    private void SwitchTab(string tab)
+    {
+        selectedTab = tab;
+        selectedTrainingTypes.Clear();
+    }
+
+    private List<TrainingSession> FilteredSessions(List<TrainingSession> sessions) =>
+        selectedTrainingTypes.Count == 0
+            ? sessions
+            : sessions.Where(s => selectedTrainingTypes.Contains(s.TrainingTypeCode ?? "")).ToList();
+
+    private static string NormalizeTypeCode(string? code) => code ?? "";
+
+    private static string GetTrainingTypeLabel(string? code) => code switch
+    {
+        "SMALL_MULTIPLICATION" => "\u2716\uFE0F N\u00e1sobilka",
+        "ADD_SUB_100"          => "\u2795 S\u010d\u00edt\u00e1n\u00ed / Od\u010d\u00edt\u00e1n\u00ed",
+        _                      => "\U0001F4DA Tr\u00e9nink"
+    };
+
+    private static string GetTrainingTypeBadgeClass(string? code) => code switch
+    {
+        "SMALL_MULTIPLICATION" => "badge-mul",
+        "ADD_SUB_100"          => "badge-addsub",
+        _                      => "badge-other"
+    };
 
     private class ProblematicExercise
     {
@@ -326,8 +363,34 @@ else
 
             <div class="recent-sessions">
                 <h2>Poslední tréninky</h2>
+
+                @{
+                    var availableTypes = GetAvailableTypes(sessions).ToList();
+                    var displaySessions = FilteredSessions(sessions);
+                }
+
+                @if (availableTypes.Count > 1)
+                {
+                    <div class="type-filter">
+                        @foreach (var code in availableTypes)
+                        {
+                            bool sel = selectedTrainingTypes.Contains(code);
+                            <button class="type-chip @(sel ? "selected " + GetTrainingTypeBadgeClass(code) : "")"
+                                    @onclick="() => { ToggleTypeFilter(code); StateHasChanged(); }">
+                                @GetTrainingTypeLabel(code == "" ? null : code)
+                            </button>
+                        }
+                        @if (selectedTrainingTypes.Count > 0)
+                        {
+                            <button class="type-chip-clear" @onclick="() => { selectedTrainingTypes.Clear(); StateHasChanged(); }">
+                                ✕ Vše
+                            </button>
+                        }
+                    </div>
+                }
+
                 <div class="sessions-list">
-                    @foreach (var session in sessions.Take(10))
+                    @foreach (var session in displaySessions.Take(50))
                     {
                         double accuracy = session.TotalExamples > 0 ? (double)session.CorrectFirstAttempt / session.TotalExamples * 100 : 0;
                         string accuracyClass = accuracy >= 80 ? "accuracy-high" : accuracy >= 60 ? "accuracy-medium" : "accuracy-low";
@@ -335,7 +398,12 @@ else
 
                         <div class="session-card @(isExpanded ? "expanded" : "")">
                             <div class="session-item" @onclick="() => ToggleSessionDetail(session.SessionId)">
-                                <div class="session-date">@session.EndTime.ToString("dd.MM.yyyy HH:mm")</div>
+                                <div class="session-left">
+                                    <div class="session-date">@session.EndTime.ToString("dd.MM.yyyy HH:mm")</div>
+                                    <span class="session-type-badge @GetTrainingTypeBadgeClass(session.TrainingTypeCode)">
+                                        @GetTrainingTypeLabel(session.TrainingTypeCode)
+                                    </span>
+                                </div>
                                 <div class="session-stats">
                                     <span>@session.TotalExamples @PrikladText(session.TotalExamples)</span>
                                     <span>@TimeSpan.FromSeconds(session.DurationSeconds).ToString(@"mm\:ss")</span>
@@ -433,14 +501,14 @@ else
                                                             {
                                                                 <span class="wrong-answer-chip">@wrong</span>
                                                             }
-                                                            @if (exercise.IsCorrect)
-                                                            {
-                                                                <span class="correct-value">✓ @exercise.CorrectAnswer</span>
-                                                            }
                                                         }
-                                                        else
+                                                        @if (exercise.IsCorrect && !exercise.SkippedByUser && !exercise.GaveUp)
                                                         {
                                                             <span class="correct-value">✓ @exercise.CorrectAnswer</span>
+                                                        }
+                                                        else if (exercise.SkippedByUser || exercise.GaveUp)
+                                                        {
+                                                            <span class="correct-value-reveal">= @exercise.CorrectAnswer</span>
                                                         }
                                                     </div>
                                                     <div class="exercise-meta">
@@ -806,6 +874,74 @@ else
         align-items: center;
         cursor: pointer;
         transition: background 0.2s;
+    }
+
+    .session-left {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    /* ── Typ tréninku badge ── */
+    .session-type-badge {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 0.15rem 0.5rem;
+        border-radius: 20px;
+        width: fit-content;
+    }
+
+    .badge-mul    { background: #ebf4ff; color: #2b6cb0; }
+    .badge-addsub { background: #f0fff4; color: #276749; }
+    .badge-other  { background: #f7fafc; color: #4a5568; }
+
+    /* ── Filter ── */
+    .type-filter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        align-items: center;
+    }
+
+    .type-chip {
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        border: 1.5px solid #e2e8f0;
+        background: white;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.15s;
+        color: #4a5568;
+    }
+
+    .type-chip:hover { border-color: #667eea; color: #667eea; }
+
+    .type-chip.selected.badge-mul    { background: #ebf4ff; border-color: #2b6cb0; color: #2b6cb0; }
+    .type-chip.selected.badge-addsub { background: #f0fff4; border-color: #276749; color: #276749; }
+
+    .type-chip-clear {
+        padding: 0.3rem 0.7rem;
+        border-radius: 20px;
+        border: 1.5px solid #e2e8f0;
+        background: white;
+        font-size: 0.8rem;
+        cursor: pointer;
+        color: #a0aec0;
+    }
+
+    .type-chip-clear:hover { border-color: #fc8181; color: #e53e3e; }
+
+    /* ── Správná odpověď u skip/gave-up ── */
+    .correct-value-reveal {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #718096;
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+        padding: 0.1rem 0.4rem;
+        border-radius: 4px;
     }
 
     .session-item:hover {

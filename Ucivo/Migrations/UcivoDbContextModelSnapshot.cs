@@ -252,6 +252,10 @@ namespace TurboSkola.Migrations
                     b.Property<int>("TotalExamples")
                         .HasColumnType("int");
 
+                    b.Property<string>("TrainingTypeCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.HasKey("SessionId");
 
                     b.HasIndex("ProfileId");

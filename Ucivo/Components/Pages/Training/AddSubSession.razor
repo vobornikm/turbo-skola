@@ -166,7 +166,7 @@
         <div class="modal-overlay" @onclick="CloseHintDialog">
             <div class="modal-content hint-modal" @onclick:stopPropagation="true">
                 <h2>&#x1F4A1; Nápověda</h2>
-                <p class="hint-dialog-text">@GetHintText()</p>
+                <p class="hint-dialog-text">@((MarkupString)GetHintText())</p>
                 <div class="modal-buttons">
                     <button class="btn-modal-cancel" @onclick="CloseHintDialog">&#x2713; Rozumím, zkusím znovu</button>
                 </div>
@@ -179,7 +179,7 @@
         <div class="modal-overlay" @onclick="CloseGiveUpDialog">
             <div class="modal-content hint-modal" @onclick:stopPropagation="true">
                 <h2>&#x1F4A1; Správné řešení</h2>
-                <p class="hint-dialog-text">@GetHintText()</p>
+                <p class="hint-dialog-text">@((MarkupString)GetHintText())</p>
                 @if (currentExerciseIndex < exercises.Count)
                 {
                     <div class="solution-box">
@@ -240,7 +240,8 @@
         sessionId = (await TrainingService.CreateSessionAsync(
             ProfileService.CurrentProfileId,
             durationSeconds,
-            settings.DurationType == "Count" ? settings.DurationValue : null
+            settings.DurationType == "Count" ? settings.DurationValue : null,
+            "ADD_SUB_100"
         )).SessionId;
 
         stopwatch.Start();
@@ -525,58 +526,112 @@
     {
         if (currentExerciseIndex >= exercises.Count) return "";
         var ex = exercises[currentExerciseIndex];
-        var display = ex.Exercise.DisplayText;
-        var a = ex.Exercise.FirstNumber;
-        var b = ex.Exercise.SecondNumber;
-        var wrong = ex.UserAnswer ?? 0;
+        if (ex.UserAnswer == null) return "";
 
-        // Závorky nebo více čísel
-        if (ex.Exercise.Operation is "parentheses" or "multi")
-            return "Počítej zleva doprava, krok za krokem. Závorky vyřeš jako první!";
+        var exercise = ex.Exercise;
+        int wrong   = ex.UserAnswer.Value;
+        int correct = exercise.CorrectAnswer;
+        int a       = exercise.FirstNumber;
+        int b       = exercise.SecondNumber;
+        int diff    = Math.Abs(wrong - correct);
+        bool tooHigh = wrong > correct;
 
-        // Lumpárny – doplnit chybějící číslo ve sčítání
-        if (display.Contains("_") && ex.Exercise.Operation == "+")
+        string closeText = diff switch
         {
-            int result = a + b;
-            if (display.StartsWith("_"))
-                return $"Hledáš první sčítanec. Zkus odečíst: {result} \u2212 {b} = ?";
-            return $"Hledáš druhý sčítanec. Zkus odečíst: {result} \u2212 {a} = ?";
+            <= 2 => "&#x1F7E2; Skoro! Jsi velmi blízko – dej pozor na detail.",
+            <= 5 => "&#x1F7E1; Nejsi daleko.",
+            _    => "&#x1F534; Jsi dost daleko od správného výsledku."
+        };
+
+        string dirText = tooHigh
+            ? $"Je příliš <strong>velký</strong> (o <strong class='hint-diff'>{diff}</strong>)."
+            : $"Je příliš <strong>malý</strong> (o <strong class='hint-diff'>{diff}</strong>).";
+
+        // Závorky / více čísel — nemůžeme jednoduše zpětně zrekonstruovat
+        if (exercise.Operation is "parentheses" or "multi")
+            return $"Počítej zleva doprava, krok za krokem.<br><br>{closeText}<br>{dirText}";
+
+        // Určení typu ze zobrazení
+        string display = exercise.DisplayText;
+        bool hasFillIn = display.Contains("_");
+        string checkLine;
+
+        if (exercise.Operation == "+")
+        {
+            int fullResult = a + b;
+
+            if (!hasFillIn)
+            {
+                // Přímé: a + b = ?   →  zpětná zkouška: wrong − b má dát a
+                int check = wrong - b;
+                checkLine = $"<span class='hint-calc'>{wrong}</span> − {b} = " +
+                            $"<strong class='hint-check'>{check}</strong> " +
+                            $"<span class='hint-expect'>(má být {a})</span>";
+            }
+            else
+            {
+                int opIdx  = display.IndexOf('+');
+                int usIdx  = display.IndexOf('_');
+                bool fillFirst = usIdx < opIdx;
+
+                if (fillFirst)
+                {
+                    // _ + b = result  →  wrong + b má dát fullResult
+                    int check = wrong + b;
+                    checkLine = $"<strong class='hint-wrong'>{wrong}</strong> + {b} = " +
+                                $"<strong class='hint-check'>{check}</strong> " +
+                                $"<span class='hint-expect'>(má být {fullResult})</span>";
+                }
+                else
+                {
+                    // a + _ = result  →  a + wrong má dát fullResult
+                    int check = a + wrong;
+                    checkLine = $"{a} + <strong class='hint-wrong'>{wrong}</strong> = " +
+                                $"<strong class='hint-check'>{check}</strong> " +
+                                $"<span class='hint-expect'>(má být {fullResult})</span>";
+                }
+            }
+        }
+        else // "-"
+        {
+            int fullResult = a - b;
+
+            if (!hasFillIn)
+            {
+                // Přímé: a − b = ?   →  zpětná zkouška: wrong + b má dát a
+                int check = wrong + b;
+                checkLine = $"<span class='hint-calc'>{wrong}</span> + {b} = " +
+                            $"<strong class='hint-check'>{check}</strong> " +
+                            $"<span class='hint-expect'>(má být {a})</span>";
+            }
+            else
+            {
+                int opIdx  = display.IndexOf('-');
+                int usIdx  = display.IndexOf('_');
+                bool fillFirst = usIdx < opIdx;
+
+                if (fillFirst)
+                {
+                    // _ − b = result  →  wrong − b má dát fullResult
+                    int check = wrong - b;
+                    checkLine = $"<strong class='hint-wrong'>{wrong}</strong> − {b} = " +
+                                $"<strong class='hint-check'>{check}</strong> " +
+                                $"<span class='hint-expect'>(má být {fullResult})</span>";
+                }
+                else
+                {
+                    // a − _ = result  →  a − wrong má dát fullResult
+                    int check = a - wrong;
+                    checkLine = $"{a} − <strong class='hint-wrong'>{wrong}</strong> = " +
+                                $"<strong class='hint-check'>{check}</strong> " +
+                                $"<span class='hint-expect'>(má být {fullResult})</span>";
+                }
+            }
         }
 
-        // Lumpárny – doplnit chybějící číslo v odčítání
-        if (display.Contains("_") && ex.Exercise.Operation == "-")
-        {
-            int result = a - b;
-            if (display.StartsWith("_"))
-                return $"Hledáš menšenec. Zkus sečíst: {result} + {b} = ?";
-            return $"Hledáš menšitele. Zkus odečíst: {a} \u2212 {result} = ?";
-        }
-
-        // Normální sčítání
-        if (ex.Exercise.Operation == "+")
-        {
-            int result = a + b;
-            if (wrong > result)
-                return $"Výsledek je příliš velký. Zkus si spočítat: {a} + {b} pomalu po desítkách.";
-            if (wrong > 0 && wrong < result)
-                return $"Skoro! Zkus to znovu: {a} + {b}. Přičti nejdřív desítky, pak jednotky.";
-            if (b >= 10)
-                return $"Rozlož {b} na desítky a jednotky: {a} + {b / 10 * 10} = {a + b / 10 * 10}, pak přidej {b % 10}.";
-            return $"Zkus počítat dopředu od {a}: přidej {b}.";
-        }
-
-        // Normální odčítání
-        if (ex.Exercise.Operation == "-")
-        {
-            int result = a - b;
-            if (wrong > a)
-                return $"Výsledek nemůže být větší než {a}. Odčítáním číslo zmenšujeme!";
-            if (b >= 10)
-                return $"Rozlož {b}: {a} \u2212 {b / 10 * 10} = {a - b / 10 * 10}, pak odečti {b % 10}.";
-            return $"Zkus počítat zpátky od {a}: odečti {b}.";
-        }
-
-        return "Zkus to znovu, pozorně si přečti příklad.";
+        return $"Zpětná zkouška:<br>" +
+               $"<div class='hint-check-box'>{checkLine}</div>" +
+               $"{closeText}<br>{dirText}";
     }
 
     private async Task EndTrainingEarly()
@@ -811,6 +866,43 @@
         line-height: 1.65;
         margin: 0.5rem 0 1.25rem;
         text-align: left;
+    }
+
+    .hint-check-box {
+        background: #f0f4ff;
+        border-left: 4px solid #667eea;
+        border-radius: 6px;
+        padding: 0.65rem 1rem;
+        margin: 0.5rem 0 1rem;
+        font-size: 1.1rem;
+        font-family: 'Courier New', monospace;
+        letter-spacing: 0.02em;
+    }
+
+    .hint-wrong {
+        color: #e53e3e;
+        background: #fff5f5;
+        padding: 0 3px;
+        border-radius: 3px;
+    }
+
+    .hint-calc {
+        color: #2d3748;
+        font-weight: 600;
+    }
+
+    .hint-check {
+        color: #2b6cb0;
+        font-weight: 700;
+    }
+
+    .hint-expect {
+        color: #718096;
+        font-size: 0.9em;
+    }
+
+    .hint-diff {
+        color: #c05621;
     }
 
     .solution-box {
