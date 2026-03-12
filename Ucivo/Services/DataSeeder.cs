@@ -22,6 +22,9 @@ public class DataSeeder
 
         // Vždy zkontrolovat nové tréninky (pøidává chybìjící typy)
         await SeedAddSubTrainingAsync(context);
+
+        // Párové souhlásky
+        await SeedPairedConsonantsTrainingAsync(context);
     }
 
     private static async Task SeedInitialDataAsync(UcivoDbContext context)
@@ -150,7 +153,8 @@ public class DataSeeder
         var trainingIcons = new Dictionary<string, string>
         {
             { "SMALL_MULTIPLICATION", "\u2716\uFE0F" }, // ??
-            { "ADD_SUB_100",          "\u2795"  }  // ?
+            { "ADD_SUB_100",          "\u2795"  },       // ?
+            { "PAIRED_CONSONANTS",    "\U0001F524" }     // ??
         };
 
         bool changed = false;
@@ -202,6 +206,32 @@ public class DataSeeder
         };
 
         context.TrainingTypes.Add(addSubTraining);
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedPairedConsonantsTrainingAsync(UcivoDbContext context)
+    {
+        if (await context.TrainingTypes.AnyAsync(t => t.Code == "PAIRED_CONSONANTS"))
+            return;
+
+        var czech = await context.Subjects.FirstOrDefaultAsync(s => s.Code == "CZECH");
+        if (czech == null) return;
+
+        var pairedConsonants = new TrainingType
+        {
+            SubjectId = czech.SubjectId,
+            Name = "P\u00e1rov\u00e9 souhl\u00e1sky",
+            Code = "PAIRED_CONSONANTS",
+            Description = "Tr\u00e9nink p\u00e1rov\u00fdch souhl\u00e1sek B/P, V/F, D/T, \u010e/\u0164, Z/S, \u017d/\u0160, G/K, H/CH",
+            Icon = "\U0001F524",
+            GeneratorClassName = "TurboSkola.TrainingGenerators.PairedConsonantsGenerator",
+            MinGradeNumber = 2,
+            MaxGradeNumber = 4,
+            DisplayOrder = 1,
+            IsActive = true
+        };
+
+        context.TrainingTypes.Add(pairedConsonants);
         await context.SaveChangesAsync();
     }
 }

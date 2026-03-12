@@ -1,4 +1,4 @@
-@page "/training/addsub/setup"
+@page "/training/czech/paired-consonants/setup"
 @rendermode InteractiveServer
 @using TurboSkola.Services
 @using System.Text.Json
@@ -8,14 +8,14 @@
 @inject IProfileService ProfileService
 @inject NavigationManager Navigation
 
-<PageTitle>Nastavení tréninku - Sčítání a odčítání do 100</PageTitle>
+<PageTitle>Nastavení tréninku - Párové souhlásky</PageTitle>
 
 <LoadingSpinner IsLoading="@isStarting" Message="Připravuji trénink..." />
 
 <div class="training-setup-container">
     <div class="setup-header">
         <a href="/training" class="back-link">← Zpět na výběr</a>
-        <h1>➕ Sčítání a odčítání do 100</h1>
+        <h1>🔤 Párové souhlásky</h1>
         <p class="subtitle">Nastav si svůj trénink</p>
     </div>
 
@@ -53,8 +53,8 @@
             {
                 <div class="slider-container">
                     <div class="slider-header">
-                        <span class="slider-label">Počet příkladů</span>
-                        <span class="slider-value">@settings.DurationValue @PrikladText(settings.DurationValue)</span>
+                        <span class="slider-label">Počet slov</span>
+                        <span class="slider-value">@settings.DurationValue @SlovoText(settings.DurationValue)</span>
                     </div>
                     <input type="range" class="modern-slider" min="5" max="100" step="5"
                            @bind="settings.DurationValue" @bind:event="oninput" />
@@ -65,162 +65,107 @@
             }
         </div>
 
-        <!-- OPERACE -->
+        <!-- VÝBĚR PÁRŮ SOUHLÁSEK -->
         <div class="form-section">
-            <h3>🔢 Operace</h3>
-            <div class="toggles-container">
-                <div class="toggle-item" @onclick="() => { settings.IncludeAddition = !settings.IncludeAddition; StateHasChanged(); }">
-                    <div class="toggle-label">
-                        <span class="toggle-icon">➕</span>
-                        <span>Sčítání</span>
-                    </div>
-                    <div class="toggle-switch @(settings.IncludeAddition ? "on" : "off")">
-                        <div class="toggle-knob"></div>
-                    </div>
-                </div>
-                <div class="toggle-item" @onclick="() => { settings.IncludeSubtraction = !settings.IncludeSubtraction; StateHasChanged(); }">
-                    <div class="toggle-label">
-                        <span class="toggle-icon">➖</span>
-                        <span>Odčítání</span>
-                    </div>
-                    <div class="toggle-switch @(settings.IncludeSubtraction ? "on" : "off")">
-                        <div class="toggle-knob"></div>
-                    </div>
-                </div>
+            <h3>🔤 Párové souhlásky</h3>
+            <div class="quick-actions">
+                <button class="quick-btn" @onclick="SelectAllPairs">Vše</button>
+                <button class="quick-btn" @onclick="SelectNonePairs">Nic</button>
+                <button class="quick-btn" @onclick="SelectBasicPairs">Základní</button>
             </div>
-            @if (!settings.IncludeAddition && !settings.IncludeSubtraction)
+            <div class="pairs-grid">
+                @foreach (var pair in allPairs)
+                {
+                    bool isSelected = settings.SelectedPairs.Contains(pair.Code);
+                    <button class="pair-chip @(isSelected ? "selected" : "")"
+                            @onclick="() => TogglePair(pair.Code)">
+                        <span class="pair-letters">@pair.Display</span>
+                    </button>
+                }
+            </div>
+            @if (settings.SelectedPairs.Count == 0)
             {
                 <div class="validation-warning">
-                    <span>⚠️</span> Musí být vybrána alespoň jedna operace
+                    <span>⚠️</span> Musí být vybrán alespoň jeden pár
+                </div>
+            }
+            else
+            {
+                <div class="selected-info">
+                    ✓ Vybráno: @settings.SelectedPairs.Count @ParText(settings.SelectedPairs.Count)
                 </div>
             }
         </div>
 
-        <!-- NASTAVENÍ SČÍTÁNÍ -->
-        @if (settings.IncludeAddition)
-        {
-            <div class="form-section op-section addition-section">
-                <h3>➕ Nastavení sčítání</h3>
-                <div class="toggles-container">
-                    <div class="toggle-item" @onclick="() => { settings.AdditionSecondTwoDigit = !settings.AdditionSecondTwoDigit; StateHasChanged(); }">
-                        <div class="toggle-label">
-                            <span class="toggle-icon">🔟</span>
-                            <div>
-                                <div>Druhý sčítanec dvouciferný</div>
-                                <div class="toggle-hint">např. 35 + 42</div>
-                            </div>
-                        </div>
-                        <div class="toggle-switch @(settings.AdditionSecondTwoDigit ? "on" : "off")">
-                            <div class="toggle-knob"></div>
-                        </div>
-                    </div>
-                    <div class="toggle-item" @onclick="() => { settings.AdditionCarryOver = !settings.AdditionCarryOver; StateHasChanged(); }">
-                        <div class="toggle-label">
-                            <span class="toggle-icon">↗️</span>
-                            <div>
-                                <div>Přechod přes desítku</div>
-                                <div class="toggle-hint">např. 47 + 8 = 55</div>
-                            </div>
-                        </div>
-                        <div class="toggle-switch @(settings.AdditionCarryOver ? "on" : "off")">
-                            <div class="toggle-knob"></div>
-                        </div>
-                    </div>
-                    <div class="toggle-item" @onclick="() => { settings.AdditionTricks = !settings.AdditionTricks; StateHasChanged(); }">
-                        <div class="toggle-label">
-                            <span class="toggle-icon">🎲</span>
-                            <div>
-                                <div>Zahrnout lumpárny</div>
-                                <div class="toggle-hint">např. 35 + _ = 71, nebo 71 = _ + 36</div>
-                            </div>
-                        </div>
-                        <div class="toggle-switch @(settings.AdditionTricks ? "on" : "off")">
-                            <div class="toggle-knob"></div>
-                        </div>
-                    </div>
-                </div>
+        <!-- POZICE VE SLOVĚ -->
+        <div class="form-section">
+            <h3>📍 Pozice hlásky</h3>
+            <div class="segmented-control triple">
+                <button class="segment @(settings.SoundPosition == "End" ? "active" : "")"
+                        @onclick="SetSoundPositionEnd">
+                    <span class="icon">⬅️</span>
+                    <span>Konec</span>
+                </button>
+                <button class="segment @(settings.SoundPosition == "Middle" ? "active" : "")"
+                        @onclick="SetSoundPositionMiddle">
+                    <span class="icon">↔️</span>
+                    <span>Uprostřed</span>
+                </button>
+                <button class="segment @(settings.SoundPosition == "Both" ? "active" : "")"
+                        @onclick="SetSoundPositionBoth">
+                    <span class="icon">🔄</span>
+                    <span>Obojí</span>
+                </button>
             </div>
-        }
+        </div>
 
-        <!-- NASTAVENÍ ODČÍTÁNÍ -->
-        @if (settings.IncludeSubtraction)
-        {
-            <div class="form-section op-section subtraction-section">
-                <h3>➖ Nastavení odčítání</h3>
-                <div class="toggles-container">
-                    <div class="toggle-item" @onclick="() => { settings.SubtractionSecondTwoDigit = !settings.SubtractionSecondTwoDigit; StateHasChanged(); }">
-                        <div class="toggle-label">
-                            <span class="toggle-icon">🔟</span>
-                            <div>
-                                <div>Menšitel dvouciferný</div>
-                                <div class="toggle-hint">např. 75 - 38</div>
-                            </div>
-                        </div>
-                        <div class="toggle-switch @(settings.SubtractionSecondTwoDigit ? "on" : "off")">
-                            <div class="toggle-knob"></div>
+        <!-- ZPŮSOB ODPOVÍDÁNÍ -->
+        <div class="form-section">
+            <h3>🎮 Způsob odpovídání</h3>
+            <div class="toggles-container">
+                <div class="toggle-item" @onclick="ToggleAnswerButtons">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">🔘</span>
+                        <div>
+                            <div>Zobrazit tlačítka odpovědí</div>
+                            <div class="toggle-hint">Místo klávesnice se zobrazí tlačítka s variantami</div>
                         </div>
                     </div>
-                    <div class="toggle-item" @onclick="() => { settings.SubtractionCarryOver = !settings.SubtractionCarryOver; StateHasChanged(); }">
-                        <div class="toggle-label">
-                            <span class="toggle-icon">↘️</span>
-                            <div>
-                                <div>Přechod přes desítku</div>
-                                <div class="toggle-hint">např. 53 - 7 = 46</div>
-                            </div>
-                        </div>
-                        <div class="toggle-switch @(settings.SubtractionCarryOver ? "on" : "off")">
-                            <div class="toggle-knob"></div>
-                        </div>
-                    </div>
-                    <div class="toggle-item" @onclick="() => { settings.SubtractionTricks = !settings.SubtractionTricks; StateHasChanged(); }">
-                        <div class="toggle-label">
-                            <span class="toggle-icon">🎲</span>
-                            <div>
-                                <div>Zahrnout lumpárny</div>
-                                <div class="toggle-hint">např. 75 - _ = 38, nebo _ - 27 = 35</div>
-                            </div>
-                        </div>
-                        <div class="toggle-switch @(settings.SubtractionTricks ? "on" : "off")">
-                            <div class="toggle-knob"></div>
-                        </div>
+                    <div class="toggle-switch @(settings.ShowAnswerButtons ? "on" : "off")">
+                        <div class="toggle-knob"></div>
                     </div>
                 </div>
-            </div>
-        }
 
-        <!-- KOMBINOVANÁ NASTAVENÍ (jen při obou operacích) -->
-        @if (settings.IncludeAddition && settings.IncludeSubtraction)
-        {
-            <div class="form-section op-section combined-section">
-                <h3>🔀 Pokročilá kombinace</h3>
-                <div class="toggles-container">
-                    <div class="toggle-item" @onclick="() => { settings.IncludeParentheses = !settings.IncludeParentheses; StateHasChanged(); }">
+                @if (settings.ShowAnswerButtons && settings.SelectedPairs.Count > 1)
+                {
+                    <div class="toggle-item" @onclick="() => { settings.ShowAllVariantsButtons = !settings.ShowAllVariantsButtons; StateHasChanged(); }">
                         <div class="toggle-label">
-                            <span class="toggle-icon">🔢</span>
+                            <span class="toggle-icon">🎯</span>
                             <div>
-                                <div>Zahrnout závorky</div>
-                                <div class="toggle-hint">např. 35 - (12 + 4) = , (20 + 5) + 17 =</div>
+                                <div>Tlačítka všech variant</div>
+                                <div class="toggle-hint">Zobrazí písmena ze všech vybraných párů – těžší!</div>
                             </div>
                         </div>
-                        <div class="toggle-switch @(settings.IncludeParentheses ? "on" : "off")">
+                        <div class="toggle-switch @(settings.ShowAllVariantsButtons ? "on" : "off")">
                             <div class="toggle-knob"></div>
                         </div>
                     </div>
-                    <div class="toggle-item" @onclick="() => { settings.IncludeMultipleNumbers = !settings.IncludeMultipleNumbers; StateHasChanged(); }">
-                        <div class="toggle-label">
-                            <span class="toggle-icon">➕➖</span>
-                            <div>
-                                <div>Více čísel ve výpočtu (3–6)</div>
-                                <div class="toggle-hint">např. 15 + 27 - 11 = , 21 - 6 + 35 - 4 =</div>
-                            </div>
+                }
+
+                <div class="toggle-item" @onclick="() => { settings.ShowFullWordAfterAnswer = !settings.ShowFullWordAfterAnswer; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">👁️</span>
+                        <div>
+                            <div>Zobrazit celé slovo po odpovědi</div>
+                            <div class="toggle-hint">Po správné odpovědi se ukáže celé slovo</div>
                         </div>
-                        <div class="toggle-switch @(settings.IncludeMultipleNumbers ? "on" : "off")">
-                            <div class="toggle-knob"></div>
-                        </div>
+                    </div>
+                    <div class="toggle-switch @(settings.ShowFullWordAfterAnswer ? "on" : "off")">
+                        <div class="toggle-knob"></div>
                     </div>
                 </div>
             </div>
-        }
+        </div>
 
         <!-- TLAČÍTKO START -->
         <div class="start-section">
@@ -233,7 +178,7 @@
         </div>
 
         <!-- PŘIPRAVIT PRO DÍTĚ -->
-        <PrepareForChildPanel TrainingTypeCode="ADD_SUB_100"
+        <PrepareForChildPanel TrainingTypeCode="PAIRED_CONSONANTS"
                               SettingsJson="@GetSettingsJson()"
                               IsValid="@IsValid()" />
 
@@ -241,11 +186,24 @@
 </div>
 
 @code {
-    private AddSubTrainingSettings settings = new();
+    private PairedConsonantsTrainingSettings settings = new();
     private bool isStarting = false;
-    private bool isInitialized = false;
     private int timeValue = 5;
     private int countValue = 20;
+
+    private record PairInfo(string Code, string Display);
+
+    private static readonly PairInfo[] allPairs =
+    [
+        new("B_P", "B / P"),
+        new("V_F", "V / F"),
+        new("D_T", "D / T"),
+        new("Ď_Ť", "Ď / Ť"),
+        new("Z_S", "Z / S"),
+        new("Ž_Š", "Ž / Š"),
+        new("G_K", "G / K"),
+        new("H_CH", "H / CH")
+    ];
 
     protected override async Task OnInitializedAsync()
     {
@@ -253,19 +211,18 @@
         {
             await Task.Delay(150);
             var profileId = ProfileService?.CurrentProfileId;
-            settings = await SettingsService.GetAddSubSettingsAsync(profileId);
+            settings = await SettingsService.GetPairedConsonantsSettingsAsync(profileId);
 
             if (settings.DurationType == "Time")
                 timeValue = settings.DurationValue;
             else
                 countValue = settings.DurationValue;
 
-            isInitialized = true;
             StateHasChanged();
         }
         catch
         {
-            isInitialized = true;
+            // Keep default settings
         }
     }
 
@@ -285,8 +242,45 @@
         StateHasChanged();
     }
 
-    private bool IsValid() =>
-        (settings.IncludeAddition || settings.IncludeSubtraction) && settings.DurationValue > 0;
+    private void SetSoundPositionEnd() { settings.SoundPosition = "End"; StateHasChanged(); }
+    private void SetSoundPositionMiddle() { settings.SoundPosition = "Middle"; StateHasChanged(); }
+    private void SetSoundPositionBoth() { settings.SoundPosition = "Both"; StateHasChanged(); }
+
+    private void ToggleAnswerButtons()
+    {
+        settings.ShowAnswerButtons = !settings.ShowAnswerButtons;
+        if (!settings.ShowAnswerButtons) settings.ShowAllVariantsButtons = false;
+        StateHasChanged();
+    }
+
+    private void TogglePair(string code)
+    {
+        if (settings.SelectedPairs.Contains(code))
+            settings.SelectedPairs.Remove(code);
+        else
+            settings.SelectedPairs.Add(code);
+        StateHasChanged();
+    }
+
+    private void SelectAllPairs()
+    {
+        settings.SelectedPairs = allPairs.Select(p => p.Code).ToList();
+        StateHasChanged();
+    }
+
+    private void SelectNonePairs()
+    {
+        settings.SelectedPairs.Clear();
+        StateHasChanged();
+    }
+
+    private void SelectBasicPairs()
+    {
+        settings.SelectedPairs = ["B_P", "D_T", "Z_S", "V_F"];
+        StateHasChanged();
+    }
+
+    private bool IsValid() => settings.SelectedPairs.Count > 0 && settings.DurationValue > 0;
 
     private async Task StartTraining()
     {
@@ -297,14 +291,14 @@
             StateHasChanged();
             await Task.Delay(100);
 
-            SessionService.SetCurrentAddSubSettings(settings);
+            SessionService.SetCurrentPairedConsonantsSettings(settings);
 
             if (AuthService?.IsAuthenticated == true && ProfileService.CurrentProfileId.HasValue)
             {
-                await SettingsService.SaveAddSubSettingsAsync(ProfileService.CurrentProfileId.Value, settings);
+                await SettingsService.SavePairedConsonantsSettingsAsync(ProfileService.CurrentProfileId.Value, settings);
             }
 
-            Navigation.NavigateTo("/training/addsub/session");
+            Navigation.NavigateTo("/training/czech/paired-consonants/session");
         }
         finally
         {
@@ -312,11 +306,18 @@
         }
     }
 
-    private static string PrikladText(int n) => n switch
+    private static string SlovoText(int n) => n switch
     {
-        1 => "příklad",
-        >= 2 and <= 4 => "příklady",
-        _ => "příkladů"
+        1 => "slovo",
+        >= 2 and <= 4 => "slova",
+        _ => "slov"
+    };
+
+    private static string ParText(int n) => n switch
+    {
+        1 => "pár",
+        >= 2 and <= 4 => "páry",
+        _ => "párů"
     };
 
     private string GetSettingsJson() => JsonSerializer.Serialize(settings);
@@ -337,7 +338,7 @@
 
     .back-link {
         display: inline-block;
-        color: #667eea;
+        color: #48bb78;
         text-decoration: none;
         font-size: 0.95rem;
         margin-bottom: 0.75rem;
@@ -382,18 +383,6 @@
         font-weight: 600;
     }
 
-    .addition-section {
-        border-left: 4px solid #48bb78;
-    }
-
-    .subtraction-section {
-        border-left: 4px solid #ed8936;
-    }
-
-    .combined-section {
-        border-left: 4px solid #667eea;
-    }
-
     /* SEGMENTED CONTROL */
     .segmented-control {
         display: grid;
@@ -402,6 +391,10 @@
         border-radius: 12px;
         padding: 4px;
         margin-bottom: 1.5rem;
+    }
+
+    .segmented-control.triple {
+        grid-template-columns: 1fr 1fr 1fr;
     }
 
     .segment {
@@ -426,7 +419,7 @@
 
     .segment.active {
         background: white;
-        color: #667eea;
+        color: #48bb78;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
@@ -450,14 +443,14 @@
     .slider-value {
         font-size: 1.5rem;
         font-weight: 700;
-        color: #667eea;
+        color: #48bb78;
     }
 
     .modern-slider {
         width: 100%;
         height: 8px;
         border-radius: 4px;
-        background: linear-gradient(to right, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(to right, #48bb78 0%, #38a169 100%);
         outline: none;
         -webkit-appearance: none;
         margin: 1rem 0;
@@ -470,8 +463,8 @@
         border-radius: 50%;
         background: white;
         cursor: pointer;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-        border: 3px solid #667eea;
+        box-shadow: 0 2px 8px rgba(72, 187, 120, 0.4);
+        border: 3px solid #48bb78;
         transition: transform 0.2s;
     }
 
@@ -485,8 +478,8 @@
         border-radius: 50%;
         background: white;
         cursor: pointer;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-        border: 3px solid #667eea;
+        box-shadow: 0 2px 8px rgba(72, 187, 120, 0.4);
+        border: 3px solid #48bb78;
     }
 
     .slider-markers {
@@ -495,6 +488,72 @@
         font-size: 0.85rem;
         color: #999;
         padding: 0 4px;
+    }
+
+    /* PAIR CHIPS */
+    .quick-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .quick-btn {
+        padding: 0.4rem 0.9rem;
+        border: 1px solid #ddd;
+        border-radius: 20px;
+        background: #f8f9fa;
+        color: #666;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+    }
+
+    .quick-btn:hover {
+        background: #e8e8e8;
+    }
+
+    .pairs-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.6rem;
+    }
+
+    .pair-chip {
+        padding: 0.85rem 0.5rem;
+        border: 2px solid #e0e0e0;
+        border-radius: 12px;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: center;
+    }
+
+    .pair-chip:hover {
+        border-color: #48bb78;
+        background: #f0fff4;
+    }
+
+    .pair-chip.selected {
+        border-color: #48bb78;
+        background: linear-gradient(135deg, #f0fff4, #c6f6d5);
+        box-shadow: 0 2px 6px rgba(72, 187, 120, 0.3);
+    }
+
+    .pair-letters {
+        font-weight: 700;
+        font-size: 1rem;
+        color: #333;
+    }
+
+    .pair-chip.selected .pair-letters {
+        color: #276749;
+    }
+
+    .selected-info {
+        margin-top: 0.75rem;
+        font-size: 0.9rem;
+        color: #48bb78;
+        font-weight: 500;
     }
 
     /* TOGGLES */
@@ -549,7 +608,7 @@
     }
 
     .toggle-switch.on {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
     }
 
     .toggle-knob {
@@ -588,7 +647,7 @@
         padding: 1.5rem;
         border: none;
         border-radius: 12px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
         color: white;
         font-size: 1.2rem;
         font-weight: 700;
@@ -598,12 +657,12 @@
         justify-content: center;
         gap: 1rem;
         transition: transform 0.2s, box-shadow 0.2s;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        box-shadow: 0 4px 15px rgba(72, 187, 120, 0.4);
     }
 
     .btn-start-modern:hover:not(.disabled) {
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        box-shadow: 0 6px 20px rgba(72, 187, 120, 0.5);
     }
 
     .btn-start-modern.disabled {
@@ -632,6 +691,10 @@
 
         .setup-header h1 {
             font-size: 1.5rem;
+        }
+
+        .pairs-grid {
+            grid-template-columns: repeat(2, 1fr);
         }
     }
 </style>

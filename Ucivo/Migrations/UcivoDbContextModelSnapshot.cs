@@ -22,6 +22,99 @@ namespace TurboSkola.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("TurboSkola.Data.Models.BlockedWord", b =>
+                {
+                    b.Property<int>("BlockedWordId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("BlockedWordId"));
+
+                    b.Property<DateTime>("BlockedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("BlockedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FullWord")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("TrainingTypeCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("BlockedWordId");
+
+                    b.HasIndex("FullWord", "TrainingTypeCode")
+                        .IsUnique();
+
+                    b.ToTable("BlockedWords");
+                });
+
+            modelBuilder.Entity("TurboSkola.Data.Models.PreparedTraining", b =>
+                {
+                    b.Property<int>("PreparedTrainingId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PreparedTrainingId"));
+
+                    b.Property<int>("AssignedToProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("BatchId")
+                        .HasMaxLength(36)
+                        .HasColumnType("nvarchar(36)");
+
+                    b.Property<DateTime?>("CompletedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("ScheduledDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SettingsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("StartedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TrainingTypeCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("PreparedTrainingId");
+
+                    b.HasIndex("CreatedByProfileId");
+
+                    b.HasIndex("AssignedToProfileId", "Status", "ScheduledDate");
+
+                    b.ToTable("PreparedTrainings");
+                });
+
             modelBuilder.Entity("TurboSkola.Data.Models.Grade", b =>
                 {
                     b.Property<int>("GradeId")
@@ -439,6 +532,9 @@ namespace TurboSkola.Migrations
                     b.Property<DateTime>("LastModified")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("PairedConsonantsSettingsJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("ProfileId")
                         .HasColumnType("int");
 
@@ -458,6 +554,25 @@ namespace TurboSkola.Migrations
                         .IsRequired();
 
                     b.Navigation("SchoolLevel");
+                });
+
+            modelBuilder.Entity("TurboSkola.Data.Models.PreparedTraining", b =>
+                {
+                    b.HasOne("TurboSkola.Data.Models.UserProfile", "CreatedByProfile")
+                        .WithMany("PreparedTrainingsCreated")
+                        .HasForeignKey("CreatedByProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TurboSkola.Data.Models.UserProfile", "AssignedToProfile")
+                        .WithMany("PreparedTrainingsAssigned")
+                        .HasForeignKey("AssignedToProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CreatedByProfile");
+
+                    b.Navigation("AssignedToProfile");
                 });
 
             modelBuilder.Entity("TurboSkola.Data.Models.SessionExercise", b =>
@@ -557,6 +672,10 @@ namespace TurboSkola.Migrations
 
             modelBuilder.Entity("TurboSkola.Data.Models.UserProfile", b =>
                 {
+                    b.Navigation("PreparedTrainingsAssigned");
+
+                    b.Navigation("PreparedTrainingsCreated");
+
                     b.Navigation("Settings");
 
                     b.Navigation("TrainingSessions");

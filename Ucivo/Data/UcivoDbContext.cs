@@ -21,6 +21,8 @@ public class UcivoDbContext : DbContext
     public DbSet<Subject> Subjects { get; set; }
     public DbSet<SubjectGrade> SubjectGrades { get; set; }
     public DbSet<TrainingType> TrainingTypes { get; set; }
+    public DbSet<BlockedWord> BlockedWords { get; set; }
+    public DbSet<PreparedTraining> PreparedTrainings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -151,6 +153,38 @@ public class UcivoDbContext : DbContext
                 .WithMany(s => s.TrainingTypes)
                 .HasForeignKey(e => e.SubjectId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // BlockedWord configuration
+        modelBuilder.Entity<BlockedWord>(entity =>
+        {
+            entity.HasKey(e => e.BlockedWordId);
+            entity.Property(e => e.FullWord).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.TrainingTypeCode).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.BlockedBy).HasMaxLength(100);
+            entity.HasIndex(e => new { e.FullWord, e.TrainingTypeCode }).IsUnique();
+        });
+
+        // PreparedTraining configuration
+        modelBuilder.Entity<PreparedTraining>(entity =>
+        {
+            entity.HasKey(e => e.PreparedTrainingId);
+            entity.Property(e => e.TrainingTypeCode).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Note).HasMaxLength(500);
+            entity.Property(e => e.BatchId).HasMaxLength(36);
+
+            entity.HasOne(e => e.CreatedByProfile)
+                .WithMany(p => p.PreparedTrainingsCreated)
+                .HasForeignKey(e => e.CreatedByProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.AssignedToProfile)
+                .WithMany(p => p.PreparedTrainingsAssigned)
+                .HasForeignKey(e => e.AssignedToProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.AssignedToProfileId, e.Status, e.ScheduledDate });
         });
     }
 }

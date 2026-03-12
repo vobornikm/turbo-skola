@@ -153,6 +153,11 @@
                 <span class="btn-text">Spustit trénink</span>
             </button>
         </div>
+
+        <!-- PŘIPRAVIT PRO DÍTĚ -->
+        <PrepareForChildPanel TrainingTypeCode="SMALL_MULTIPLICATION"
+                              SettingsJson="@GetSettingsJson()"
+                              IsValid="@IsValid()" />
     </div>
 </div>
 
@@ -281,6 +286,8 @@
         >= 2 and <= 4 => "příklady",
         _ => "příkladů"
     };
+
+    private string GetSettingsJson() => JsonSerializer.Serialize(settings);
 }
 
 <style>

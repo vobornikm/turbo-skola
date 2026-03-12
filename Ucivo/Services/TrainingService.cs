@@ -10,6 +10,7 @@ public interface ITrainingService
     Task<TrainingSession> CreateSessionAsync(int? profileId, List<int> multipliers, bool includeMultiplication, bool includeDivision, int durationSeconds, int? exerciseCount);
     Task<TrainingSession> CreateSessionAsync(int? profileId, int durationSeconds, int? exerciseCount, string? trainingTypeCode = null);
     Task CompleteSessionAsync(int sessionId, int correctFirstAttempt, int totalAttempts, List<SessionExercise> exercises);
+    Task DeleteSessionAsync(int sessionId);
     Task<TrainingSession?> GetSessionAsync(int sessionId);
     Task<List<TrainingType>> GetTrainingTypesAsync();
 }
@@ -126,5 +127,19 @@ public class TrainingService : ITrainingService
     public async Task<TrainingSession?> GetSessionAsync(int sessionId)
     {
         return await _dbContext.TrainingSessions.FindAsync(sessionId);
+    }
+
+    public async Task DeleteSessionAsync(int sessionId)
+    {
+        var session = await _dbContext.TrainingSessions.FindAsync(sessionId);
+        if (session == null) return;
+
+        var exercises = await _dbContext.SessionExercises
+            .Where(e => e.SessionId == sessionId)
+            .ToListAsync();
+
+        _dbContext.SessionExercises.RemoveRange(exercises);
+        _dbContext.TrainingSessions.Remove(session);
+        await _dbContext.SaveChangesAsync();
     }
 }

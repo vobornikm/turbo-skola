@@ -1,47 +1,47 @@
-@page "/training/session"
+@page "/training/czech/paired-consonants/session"
 @layout TrainingLayout
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using TurboSkola.Services
-@using TurboSkola.Utilities
+@using TurboSkola.TrainingGenerators
 @using TurboSkola.Components.Layout
 @using System.Diagnostics
-@inject ISettingsService SettingsService
 @inject ITrainingService TrainingService
 @inject ISessionService SessionService
 @inject IAuthService AuthService
 @inject IProfileService ProfileService
 @inject NavigationManager Navigation
+@inject TurboSkola.Data.UcivoDbContext DbContext
 
-<PageTitle>TrÈnink - Mal· N·sobilka</PageTitle>
+<PageTitle>Tr√©nink - P√°rov√© souhl√°sky</PageTitle>
 
-<LoadingSpinner IsLoading="@isSaving" Message="Ukl·d·m v˝sledky..." />
+<LoadingSpinner IsLoading="@isSaving" Message="Ukl√°d√°m v√Ωsledky..." />
 
 <div class="training-session-container">
     @if (!isSessionStarted)
     {
         <div class="loading">
-            <p>P¯Ìprava trÈninku...</p>
+            <p>P≈ô√≠prava tr√©ninku...</p>
         </div>
     }
     else if (isSessionCompleted)
     {
         <div class="results-container">
-            <h1>&#x2605; V˝bornÏ! &#x2605;</h1>
+            <h1>&#x2605; V√Ωbornƒõ! &#x2605;</h1>
             <div class="results-summary">
                 <div class="result-item">
-                    <span class="result-label">Doba trv·nÌ:</span>
+                    <span class="result-label">Doba trv√°n√≠:</span>
                     <span class="result-value">@TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss")</span>
                 </div>
                 <div class="result-item">
-                    <span class="result-label">PoËet p¯Ìklad˘:</span>
+                    <span class="result-label">Poƒçet slov:</span>
                     <span class="result-value">@totalExercisesSeen</span>
                 </div>
                 <div class="result-item">
-                    <span class="result-label">Spr·vnÈ napoprvÈ:</span>
+                    <span class="result-label">Spr√°vnƒõ napoprv√©:</span>
                     <span class="result-value">@correctFirstAttempt / @totalExercisesSeen</span>
                 </div>
                 <div class="result-item">
-                    <span class="result-label">⁄spÏönost:</span>
+                    <span class="result-label">√öspƒõ≈°nost:</span>
                     <span class="result-value">@(totalExercisesSeen > 0 ? Math.Round((double)correctFirstAttempt / totalExercisesSeen * 100) : 0)%</span>
                 </div>
             </div>
@@ -49,23 +49,23 @@
                 <button class="btn-result-primary" @onclick="NextTraining" disabled="@isSaving">
                     @if (isSaving)
                     {
-                        <span>&#x27F3; Ukl·d·m...</span>
+                        <span>&#x27F3; Ukl√°d√°m...</span>
                     }
                     else
                     {
-                        <span>&#x1F680; DalöÌ trÈnink</span>
+                        <span>&#x1F680; Dal≈°√≠ tr√©nink</span>
                     }
                 </button>
                 <div class="results-ghost-row">
                     <button class="btn-result-ghost" @onclick="GoToStats" disabled="@isSaving">
-                        &#x1F4CA; Zobrazit odpovÏdi
+                        &#x1F4CA; Zobrazit odpovƒõdi
                     </button>
                     <button class="btn-result-ghost" @onclick="GoToTrainingHub" disabled="@isSaving">
-                        &#x1F500; Jin˝ trÈnink
+                        &#x1F500; Jin√Ω tr√©nink
                     </button>
                 </div>
                 <button class="btn-result-ghost full-width" @onclick="GoHome" disabled="@isSaving">
-                    &#x1F3E0; ZpÏt na dom˘
+                    &#x1F3E0; Zpƒõt na dom≈Ø
                 </button>
             </div>
         </div>
@@ -74,15 +74,15 @@
     {
         <div class="exercise-area">
             <button class="btn-details" @onclick="ToggleDetails">
-                &#x24D8; @(showDetails ? "Skr˝t" : "Zobrazit") detaily
+                &#x24D8; @(showDetails ? "Skr√Ωt" : "Zobrazit") detaily
             </button>
 
             @if (showDetails)
             {
                 <div class="details-panel">
-                    <span class="detail-mode">@((MarkupString)(durationType == "Time" ? "&#x23F1; »as" : "&#x1F522; PoËet"))</span>
+                    <span class="detail-mode">@((MarkupString)(durationType == "Time" ? "&#x23F1; ƒåas" : "&#x1F522; Poƒçet"))</span>
                     <span class="detail-item @(durationType == "Count" ? "detail-limit" : "")">
-                        @(completedExercises)@(durationType == "Count" ? $" / {exercises.Count}" : "") p¯Ìklad˘
+                        @(completedExercises)@(durationType == "Count" ? $" / {exercises.Count}" : "") p≈ô√≠klad≈Ø
                     </span>
                     <span class="detail-item @(durationType == "Time" ? "detail-limit" : "")">
                         @TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss")@(durationType == "Time" ? $" / {TimeSpan.FromSeconds(durationSeconds).ToString(@"mm\:ss")}" : "")
@@ -90,142 +90,183 @@
                 </div>
             }
 
+            @{
+                var currentEx = exercises[currentExerciseIndex];
+            }
+
             <div class="exercise-display">
-                <div class="exercise-text" @key="currentExerciseIndex">
-                    @exercises[currentExerciseIndex].Exercise.DisplayText
-                </div>
+                @if (currentEx.IsCorrect && currentSettings!.ShowFullWordAfterAnswer)
+                {
+                    <div class="word-reveal" @key="@($"reveal-{currentExerciseIndex}")">
+                        <span class="full-word">@currentEx.Exercise.FullWord</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="word-display" @key="currentExerciseIndex">
+                        @{
+                            var display = currentEx.Exercise.WordWithBlank;
+                            var blankIdx = display.IndexOf('_');
+                        }
+                        @if (blankIdx >= 0)
+                        {
+                            <span class="word-before">@display[..blankIdx]</span><span class="word-blank"></span><span class="word-after">@display[(blankIdx + 1)..]</span>
+                        }
+                        else
+                        {
+                            <span class="word-before">@display</span>
+                        }
+                    </div>
+                }
             </div>
 
-            @if (!exercises[currentExerciseIndex].IsCorrect)
+            @if (!currentEx.IsCorrect)
             {
-                <div class="input-container">
-                    @if (exercises[currentExerciseIndex].Attempts > 0 && !exercises[currentExerciseIndex].IsCorrect)
-                    {
-                        <div class="wrong-answer">
-                            <span class="wrong-text">@exercises[currentExerciseIndex].UserAnswer</span>
-                            <span class="hint-text">NevadÌ, zkus znovu</span>
-                            @if (exercises[currentExerciseIndex].Attempts >= 2)
-                            {
-                                <div class="hint-buttons">
-                                    <button class="btn-hint" @onclick="ShowHintDialog">&#x1F4A1; Chci poradit</button>
-                                    @if (exercises[currentExerciseIndex].Attempts >= 3)
-                                    {
-                                        <button class="btn-giveup" @onclick="ShowGiveUpDialog">&#x1F3F3;&#xFE0F; D·m se podat</button>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    }
-
-                    <input type="number" 
-                           @ref="answerInput"
-                           @bind="currentAnswer" 
-                           @bind:event="oninput"
-                           @onkeydown="OnKeyDown"
-                           inputmode="numeric"
-                           placeholder="OdpovÏÔ"
-                           class="answer-input" />
-                </div>
-
-                <div class="button-container">
-                    <button class="btn-submit" @onclick="SubmitAnswer" disabled="@string.IsNullOrWhiteSpace(currentAnswer)">
-                        &#x2713; Potvrdit
-                    </button>
-                    
-                    <div class="secondary-buttons">
-                        <button class="btn-end" @onclick="ShowEndConfirmDialog">
-                            &#x25A0; UkonËit trÈnink
-                        </button>
-                        <button class="btn-skip" @onclick="ShowSkipConfirmDialog">
-                            &#x2192; P¯eskoËit
-                        </button>
+                @if (currentEx.Attempts > 0)
+                {
+                    <div class="wrong-answer">
+                        <span class="wrong-text">@currentEx.UserAnswer</span>
+                        <span class="hint-text">Nevad√≠, zkus znovu</span>
+                        @if (currentEx.Attempts >= 2)
+                        {
+                            <div class="hint-buttons">
+                                @if (currentEx.Attempts >= 3)
+                                {
+                                    <button class="btn-giveup" @onclick="ShowGiveUpDialog">&#x1F3F3;&#xFE0F; D√°m se podat</button>
+                                }
+                            </div>
+                        }
                     </div>
-                </div>
+                }
+
+                @if (currentSettings!.ShowAnswerButtons)
+                {
+                    <!-- ODPOVƒöƒé TLAƒå√çTKY -->
+                    <div class="answer-buttons-container">
+                        @foreach (var option in currentAnswerOptions)
+                        {
+                            <button class="answer-btn" @onclick="() => SubmitButtonAnswer(option)">
+                                @option.ToUpper()
+                            </button>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <!-- ODPOVƒöƒé KL√ÅVESNIC√ç -->
+                    <div class="input-container">
+                        <input type="text"
+                               @ref="answerInput"
+                               @bind="currentAnswer"
+                               @bind:event="oninput"
+                               @onkeydown="OnKeyDown"
+                               placeholder="Dopl≈à p√≠smeno"
+                               class="answer-input"
+                               maxlength="2"
+                               autocomplete="off"
+                               autocorrect="off"
+                               autocapitalize="off"
+                               spellcheck="false" />
+                    </div>
+
+                    <div class="button-container">
+                        <button class="btn-submit" @onclick="SubmitTextAnswer" disabled="@string.IsNullOrWhiteSpace(currentAnswer)">
+                            &#x2713; Potvrdit
+                        </button>
+                        <div class="secondary-buttons">
+                            <button class="btn-end" @onclick="ShowEndConfirmDialog">&#x25A0; Ukonƒçit tr√©nink</button>
+                            <button class="btn-skip" @onclick="ShowSkipConfirmDialog">&#x2192; P≈ôeskoƒçit</button>
+                        </div>
+                    </div>
+                }
+
+                @if (currentSettings.ShowAnswerButtons)
+                {
+                    <div class="button-container buttons-only-controls">
+                        <div class="secondary-buttons">
+                            <button class="btn-end" @onclick="ShowEndConfirmDialog">&#x25A0; Ukonƒçit tr√©nink</button>
+                            <button class="btn-skip" @onclick="ShowSkipConfirmDialog">&#x2192; P≈ôeskoƒçit</button>
+                        </div>
+                    </div>
+                }
             }
             else
             {
                 <div class="correct-answer">
-                    <div class="correct-label">@exercises[currentExerciseIndex].UserAnswer</div>
+                    <div class="correct-label">@(currentEx.UserAnswer?.ToUpper() ?? currentEx.Exercise.CorrectLetter.ToUpper())</div>
                     <span class="checkmark">&#x2713;</span>
+                    @if (currentEx.Exercise.IsAmbiguous)
+                    {
+                        <span class="ambiguous-hint">Obƒõ p√≠smena jsou spr√°vnƒõ!</span>
+                    }
                 </div>
             }
         </div>
     }
-    
-    <!-- PotvrzovacÌ dialog pro ukonËenÌ trÈninku -->
+
     @if (showEndConfirm)
     {
         <div class="modal-overlay" @onclick="CancelEndTraining">
             <div class="modal-content" @onclick:stopPropagation="true">
-                <h2>&#x26A0; Opravdu chceö skonËit?</h2>
-                <p class="motivational-text">Uû jsi zvl·dl @completedExercises p¯Ìklad˘! Jsi tak blÌzko cÌle!</p>
-                <p class="secondary-text">Pokud teÔ skonËÌö, uloûÌ se tv˘j progres.</p>
+                <h2>&#x26A0; Opravdu chce≈° skonƒçit?</h2>
+                <p class="motivational-text">U≈æ jsi zvl√°dl @completedExercises slov! Jsi tak bl√≠zko c√≠le!</p>
+                <p class="secondary-text">Pokud teƒè skonƒç√≠≈°, ulo≈æ√≠ se tv≈Øj progres.</p>
                 <div class="modal-buttons">
-                    <button class="btn-modal-cancel" @onclick="CancelEndTraining">
-                        &#x2190; Z˘stat a pokraËovat
-                    </button>
-                    <button class="btn-modal-confirm" @onclick="ConfirmEndTraining">
-                        &#x2713; Ano, ukonËit
-                    </button>
+                    <button class="btn-modal-cancel" @onclick="CancelEndTraining">&#x2190; Z≈Østat a pokraƒçovat</button>
+                    <button class="btn-modal-confirm" @onclick="ConfirmEndTraining">&#x2713; Ano, ukonƒçit</button>
                 </div>
             </div>
         </div>
     }
-    
-    <!-- PotvrzovacÌ dialog pro p¯eskoËenÌ -->
+
     @if (showSkipConfirm)
     {
         <div class="modal-overlay" @onclick="CancelSkip">
             <div class="modal-content" @onclick:stopPropagation="true">
-                <h2>&#x2192; P¯eskoËit tento p¯Ìklad?</h2>
-                <p class="motivational-text">Zkus to jeötÏ! UrËitÏ to zvl·dneö!</p>
-                <p class="secondary-text">P¯eskoËenÈ p¯Ìklady se nepoËÌtajÌ do v˝sledk˘.</p>
+                <h2>&#x2192; P≈ôeskoƒçit toto slovo?</h2>
+                <p class="motivational-text">Zkus to je≈°tƒõ! Urƒçitƒõ to zvl√°dne≈°!</p>
                 <div class="modal-buttons">
-                    <button class="btn-modal-cancel" @onclick="CancelSkip">
-                        &#x2190; ZkusÌm to znovu
-                    </button>
-                    <button class="btn-modal-confirm" @onclick="ConfirmSkip">
-                        &#x2192; P¯eskoËit
-                    </button>
+                    <button class="btn-modal-cancel" @onclick="CancelSkip">&#x2190; Zkus√≠m to znovu</button>
+                    <button class="btn-modal-confirm" @onclick="ConfirmSkip">&#x2192; P≈ôeskoƒçit</button>
                 </div>
             </div>
         </div>
     }
 
-    <!-- N·povÏda dialog -->
-    @if (showHintDialog)
-    {
-        <div class="modal-overlay" @onclick="CloseHintDialog">
-            <div class="modal-content hint-modal" @onclick:stopPropagation="true">
-                <h2>&#x1F4A1; N·povÏda</h2>
-                <p class="hint-dialog-text">@GetHintText()</p>
-                <div class="modal-buttons">
-                    <button class="btn-modal-cancel" @onclick="CloseHintDialog">
-                        &#x2713; RozumÌm, zkusÌm znovu
-                    </button>
-                </div>
-            </div>
-        </div>
-    }
-
-    <!-- D·m se podat dialog -->
     @if (showGiveUpDialog)
     {
         <div class="modal-overlay" @onclick="CloseGiveUpDialog">
             <div class="modal-content hint-modal" @onclick:stopPropagation="true">
-                <h2>&#x1F4A1; N·povÏda</h2>
-                <p class="hint-dialog-text">@GetHintText()</p>
+                <h2>&#x1F4A1; Spr√°vn√© ≈ôe≈°en√≠</h2>
                 @if (currentExerciseIndex < exercises.Count)
                 {
-                    <div class="solution-box">
-                        <span class="solution-label">Spr·vnÈ ¯eöenÌ:</span>
-                        <span class="solution-text">@exercises[currentExerciseIndex].Exercise.DisplayText = @exercises[currentExerciseIndex].Exercise.CorrectAnswer</span>
-                    </div>
+                    var ex = exercises[currentExerciseIndex].Exercise;
+                    @if (ex.IsAmbiguous)
+                    {
+                        <p class="hint-dialog-text">
+                            Spr√°vnƒõ jsou <strong>obƒõ p√≠smena</strong>!
+                        </p>
+                        @foreach (var (letter, word) in ex.AnswerToFullWord)
+                        {
+                            <div class="solution-box">
+                                <span class="solution-label">@letter.ToUpper() ‚Üí</span>
+                                <span class="solution-text">@word</span>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="hint-dialog-text">
+                            Hledan√© p√≠smeno je <strong>@ex.CorrectLetter.ToUpper()</strong>.
+                        </p>
+                        <div class="solution-box">
+                            <span class="solution-label">Cel√© slovo:</span>
+                            <span class="solution-text">@ex.FullWord</span>
+                        </div>
+                    }
                 }
                 <div class="modal-buttons">
-                    <button class="btn-modal-cancel" @onclick="ConfirmGiveUp">
-                        RozumÌm, jdeme d·l &#x2192;
-                    </button>
+                    <button class="btn-modal-cancel" @onclick="ConfirmGiveUp">Rozum√≠m, jdeme d√°l &#x2192;</button>
                 </div>
             </div>
         </div>
@@ -233,60 +274,63 @@
 </div>
 
 @code {
-private List<SessionExerciseData> exercises = new();
-private int currentExerciseIndex = 0;
-private string currentAnswer = "";
-private bool isSessionStarted = false;
-private bool isSessionCompleted = false;
-private bool isSaving = false;
-private bool showDetails = false;
-private ElementReference answerInput;
-private int sessionId = 0;
-private Stopwatch stopwatch = new();
-private int elapsedSeconds = 0;
-private int durationSeconds = 0;
-private int completedExercises = 0;
-private int totalExercisesSeen = 0;
-private int correctFirstAttempt = 0;
-private string durationType = "Time";
-private bool showEndConfirm = false;
-private bool showSkipConfirm = false;
-private bool showHintDialog = false;
-private bool showGiveUpDialog = false;
-private TrainingSettings? currentSettings = null;
+    private List<CzechSessionExerciseData> exercises = new();
+    private int currentExerciseIndex = 0;
+    private string currentAnswer = "";
+    private bool isSessionStarted = false;
+    private bool isSessionCompleted = false;
+    private bool isSaving = false;
+    private bool showDetails = false;
+    private ElementReference answerInput;
+    private int sessionId = 0;
+    private Stopwatch stopwatch = new();
+    private int elapsedSeconds = 0;
+    private int durationSeconds = 0;
+    private int completedExercises = 0;
+    private int totalExercisesSeen = 0;
+    private int correctFirstAttempt = 0;
+    private string durationType = "Time";
+    private bool showEndConfirm = false;
+    private bool showSkipConfirm = false;
+    private bool showGiveUpDialog = false;
+    private PairedConsonantsTrainingSettings? currentSettings = null;
+    private PairedConsonantsGenerator? _generator = null;
+    private List<string> currentAnswerOptions = new();
 
     protected override async Task OnInitializedAsync()
     {
-        // Nejd¯Ìv zkusit naËÌst nastavenÌ z SessionService
-        var settings = SessionService.GetCurrentSettings();
-        
-        // Pokud nejsou v SessionService, naËÌst z DB (pro p¯ihl·öenÈ)
-        if (settings == null)
-        {
-            settings = await SettingsService.GetProfileSettingsAsync(null);
-        }
-
-        currentSettings = settings; // Uloûit pro pozdÏjöÌ pouûitÌ
+        var settings = SessionService.GetCurrentPairedConsonantsSettings() ?? new PairedConsonantsTrainingSettings();
+        currentSettings = settings;
         durationType = settings.DurationType;
-        
+
+        // Naƒç√≠st zablokovan√° slova
+        var blockedWords = DbContext.BlockedWords
+            .Where(b => b.TrainingTypeCode == "PAIRED_CONSONANTS")
+            .Select(b => b.FullWord.ToLower())
+            .ToHashSet();
+
+        _generator = new PairedConsonantsGenerator(settings, blockedWords);
+
         if (settings.DurationType == "Time")
         {
             durationSeconds = settings.DurationValue * 60;
-            GenerateExercisesForTime(settings);
+            GenerateExercisesForTime();
         }
         else
         {
             durationSeconds = settings.DurationValue * 30;
-            GenerateExercisesForCount(settings);
+            GenerateExercisesForCount(settings.DurationValue);
         }
+
+        // Nastavit odpovƒõdn√≠ tlaƒç√≠tka pro prvn√≠ cviƒçen√≠
+        if (exercises.Count > 0)
+            currentAnswerOptions = _generator.GetAnswerOptions(exercises[0].Exercise);
 
         sessionId = (await TrainingService.CreateSessionAsync(
             ProfileService.CurrentProfileId,
-            settings.IncludedMultipliers,
-            settings.IncludeMultiplication,
-            settings.IncludeDivision,
             durationSeconds,
-            settings.DurationType == "Count" ? settings.DurationValue : null
+            settings.DurationType == "Count" ? settings.DurationValue : null,
+            "PAIRED_CONSONANTS"
         )).SessionId;
 
         stopwatch.Start();
@@ -299,36 +343,24 @@ private TrainingSettings? currentSettings = null;
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (isSessionCompleted) return;
+        if (currentSettings?.ShowAnswerButtons == true) return;
         if (answerInput.Id == null) return;
         if (currentExerciseIndex >= exercises.Count) return;
 
-        // Focus pouze p¯i p¯echodu na nov˝ p¯Ìklad
-        // Ne p¯i kaûdÈm re-renderu (psani, öpatn· odpovÏÔ...) - to zp˘sobovalo blik·nÌ klavesnice
         if (currentExerciseIndex != _lastFocusedExerciseIndex)
         {
             _lastFocusedExerciseIndex = currentExerciseIndex;
-            // Mal· prodleva ñ iOS pot¯ebuje Ëas na vykreslenÌ p¯ed fokusem
             if (!firstRender) await Task.Delay(50);
             await answerInput.FocusAsync();
         }
     }
 
-    private void GenerateExercisesForTime(TrainingSettings settings)
+    private void GenerateExercisesForTime()
     {
-        // Pro Ëasov˝ reûim zaËneme s mal˝m poËtem a budeme je generovat za bÏhu
-        var generator = new ExerciseGenerator();
-        var initialCount = 10; // ZaËneme s 10 p¯Ìklady
-        var generatedExercises = generator.GenerateExercises(
-            initialCount,
-            settings.IncludedMultipliers,
-            settings.IncludeMultiplication,
-            settings.IncludeDivision
-        );
-
-        exercises = generatedExercises.Select((ex, idx) => new SessionExerciseData
+        exercises = Enumerable.Range(0, 10).Select((_, idx) => new CzechSessionExerciseData
         {
             Index = idx,
-            Exercise = ex,
+            Exercise = _generator!.GenerateExercise(),
             Attempts = 0,
             IsCorrect = false,
             IsSkipped = false,
@@ -337,20 +369,12 @@ private TrainingSettings? currentSettings = null;
         }).ToList();
     }
 
-    private void GenerateExercisesForCount(TrainingSettings settings)
+    private void GenerateExercisesForCount(int count)
     {
-        var generator = new ExerciseGenerator();
-        var generatedExercises = generator.GenerateExercises(
-            settings.DurationValue,
-            settings.IncludedMultipliers,
-            settings.IncludeMultiplication,
-            settings.IncludeDivision
-        );
-
-        exercises = generatedExercises.Select((ex, idx) => new SessionExerciseData
+        exercises = Enumerable.Range(0, count).Select((_, idx) => new CzechSessionExerciseData
         {
             Index = idx,
-            Exercise = ex,
+            Exercise = _generator!.GenerateExercise(),
             Attempts = 0,
             IsCorrect = false,
             IsSkipped = false,
@@ -361,27 +385,30 @@ private TrainingSettings? currentSettings = null;
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
-        Console.WriteLine($"Key pressed: {e.Key}");
         if (e.Key == "Enter" || e.Key == "NumpadEnter")
         {
-            Console.WriteLine("Enter detected, submitting answer...");
-            await SubmitAnswer();
+            await SubmitTextAnswer();
         }
     }
 
-    private async Task SubmitAnswer()
+    private async Task SubmitButtonAnswer(string answer)
     {
-        if (string.IsNullOrWhiteSpace(currentAnswer))
-            return;
+        await ProcessAnswer(answer.ToLower());
+    }
 
-        if (!int.TryParse(currentAnswer, out int answer))
-            return;
+    private async Task SubmitTextAnswer()
+    {
+        if (string.IsNullOrWhiteSpace(currentAnswer)) return;
+        await ProcessAnswer(currentAnswer.Trim().ToLower());
+    }
 
+    private async Task ProcessAnswer(string answer)
+    {
         var currentExercise = exercises[currentExerciseIndex];
         currentExercise.Attempts++;
         currentExercise.UserAnswer = answer;
 
-        if (answer == currentExercise.Exercise.CorrectAnswer)
+        if (currentExercise.Exercise.AcceptedAnswers.Contains(answer))
         {
             currentExercise.IsCorrect = true;
             currentExercise.TimeSpentSeconds = (int)(DateTime.UtcNow - currentExercise.StartTime).TotalSeconds;
@@ -389,40 +416,53 @@ private TrainingSettings? currentSettings = null;
                 correctFirstAttempt++;
             completedExercises++;
 
+            // Pokud odpovƒõdƒõl jedn√≠m z v√≠ce platn√Ωch p√≠smen, uk√°≈æ odpov√≠daj√≠c√≠ cel√© slovo
+            if (currentExercise.Exercise.AnswerToFullWord.TryGetValue(answer, out var matchedWord))
+                currentExercise.Exercise.FullWord = matchedWord;
+
+            if (currentSettings!.ShowFullWordAfterAnswer)
+            {
+                StateHasChanged();
+                await Task.Delay(800);
+            }
+
             if (elapsedSeconds >= durationSeconds && durationType == "Time")
             {
                 await CompleteSessionAsync();
                 return;
             }
 
-            currentExerciseIndex++;
-            currentAnswer = "";
-
-            // Pro Ëasov˝ reûim: generovat novÈ p¯Ìklady kdyû se blÌûÌ konec
-            if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3)
-            {
-                GenerateMoreExercises();
-            }
-
-            if (currentExerciseIndex < exercises.Count)
-            {
-                exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
-                StateHasChanged();
-            }
-            else
-            {
-                await CompleteSessionAsync();
-            }
+            MoveToNextExercise();
         }
         else
         {
-            // äpatn· odpovÏÔ ñ zaznamenat ji a vymazat pole pro nov˝ pokus
             currentExercise.WrongAnswers.Add(answer);
             currentAnswer = "";
             StateHasChanged();
-            // Index se nezmÏnil ? OnAfterRenderAsync re-focus p¯eskoËÌ ? zavol·me ho p¯Ìmo
-            if (answerInput.Id != null)
+            if (!currentSettings!.ShowAnswerButtons && answerInput.Id != null)
                 await answerInput.FocusAsync();
+        }
+    }
+
+    private void MoveToNextExercise()
+    {
+        currentExerciseIndex++;
+        currentAnswer = "";
+
+        if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3)
+        {
+            GenerateMoreExercises();
+        }
+
+        if (currentExerciseIndex < exercises.Count)
+        {
+            exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
+            currentAnswerOptions = _generator!.GetAnswerOptions(exercises[currentExerciseIndex].Exercise);
+            StateHasChanged();
+        }
+        else
+        {
+            _ = CompleteSessionAsync();
         }
     }
 
@@ -438,6 +478,7 @@ private TrainingSettings? currentSettings = null;
         if (currentExerciseIndex < exercises.Count)
         {
             exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
+            currentAnswerOptions = _generator!.GetAnswerOptions(exercises[currentExerciseIndex].Exercise);
             StateHasChanged();
         }
         else
@@ -457,8 +498,7 @@ private TrainingSettings? currentSettings = null;
         isSessionCompleted = true;
         isSaving = true;
         StateHasChanged();
-        
-        // P¯ipravit data pro uloûenÌ ñ zahrnout i p¯eskoËenÈ a danÈ-se-podat p¯Ìklady
+
         var exercisesToSave = new List<Data.Models.SessionExercise>();
 
         foreach (var ex in exercises.Where(e => e.Attempts > 0 || e.IsSkipped || e.GaveUp))
@@ -467,9 +507,9 @@ private TrainingSettings? currentSettings = null;
             {
                 SessionId = sessionId,
                 ExerciseIndex = ex.Index,
-                ExerciseText = ex.Exercise.DisplayText,
-                CorrectAnswer = ex.Exercise.CorrectAnswer,
-                UserAnswer = ex.UserAnswer ?? 0,
+                ExerciseText = ex.Exercise.WordWithBlank,
+                CorrectAnswer = ex.Exercise.CorrectLetter == ex.Exercise.PairOption1 ? 0 : 1,
+                UserAnswer = ex.UserAnswer == ex.Exercise.PairOption1 ? 0 : 1,
                 TimeSpentSeconds = ex.TimeSpentSeconds,
                 NumberOfAttempts = ex.Attempts,
                 IsCorrect = ex.IsCorrect,
@@ -483,12 +523,13 @@ private TrainingSettings? currentSettings = null;
         }
 
         totalExercisesSeen = exercisesToSave.Count;
-        
+
         try
         {
             if (totalExercisesSeen == 0)
             {
                 await TrainingService.DeleteSessionAsync(sessionId);
+                Console.WriteLine("Empty session deleted.");
             }
             else
             {
@@ -497,30 +538,21 @@ private TrainingSettings? currentSettings = null;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"!!! Error saving session: {ex.Message}");
+            Console.WriteLine($"Error saving session: {ex.Message}");
         }
         finally
         {
             isSaving = false;
         }
-        
+
         StateHasChanged();
     }
 
-    private void GoHome()
-    {
-        Navigation.NavigateTo("/");
-    }
+    private void GoHome() => Navigation.NavigateTo("/");
 
-    private void GoToStats()
-    {
-        Navigation.NavigateTo($"/stats?session={sessionId}");
-    }
+    private void GoToStats() => Navigation.NavigateTo($"/stats?session={sessionId}");
 
-    private void GoToTrainingHub()
-    {
-        Navigation.NavigateTo("/training");
-    }
+    private void GoToTrainingHub() => Navigation.NavigateTo("/training");
 
     private void NextTraining()
     {
@@ -531,7 +563,7 @@ private TrainingSettings? currentSettings = null;
         }
         else
         {
-            Navigation.NavigateTo("/training/setup");
+            Navigation.NavigateTo("/training/czech/paired-consonants/setup");
         }
     }
 
@@ -550,51 +582,12 @@ private TrainingSettings? currentSettings = null;
         }
     }
 
-    private void ShowEndConfirmDialog()
-    {
-        Console.WriteLine(">>> Zobrazuji dialog pro ukonËenÌ trÈninku");
-        showEndConfirm = true;
-    }
-
-    private void CancelEndTraining()
-    {
-        Console.WriteLine(">>> Zruöeno ukonËenÌ, pokraËuji v trÈninku");
-        showEndConfirm = false;
-    }
-
-    private async Task ConfirmEndTraining()
-    {
-        Console.WriteLine(">>> Potvrzeno ukonËenÌ trÈninku");
-        showEndConfirm = false;
-        await EndTrainingEarly();
-    }
-
-    private void ShowSkipConfirmDialog()
-    {
-        Console.WriteLine(">>> Zobrazuji dialog pro p¯eskoËenÌ");
-        showSkipConfirm = true;
-    }
-
-    private void CancelSkip()
-    {
-        Console.WriteLine(">>> Zruöeno p¯eskoËenÌ, pokraËuji");
-        showSkipConfirm = false;
-    }
-
-    private async Task ConfirmSkip()
-    {
-        Console.WriteLine(">>> Potvrzeno p¯eskoËenÌ");
-        showSkipConfirm = false;
-        await SkipExercise();
-    }
-
-    private void ShowHintDialog()
-    {
-        showHintDialog = true;
-        if (currentExerciseIndex < exercises.Count)
-            exercises[currentExerciseIndex].HintShown = true;
-    }
-    private void CloseHintDialog() { showHintDialog = false; }
+    private void ShowEndConfirmDialog() { showEndConfirm = true; }
+    private void CancelEndTraining() { showEndConfirm = false; }
+    private async Task ConfirmEndTraining() { showEndConfirm = false; await EndTrainingEarly(); }
+    private void ShowSkipConfirmDialog() { showSkipConfirm = true; }
+    private void CancelSkip() { showSkipConfirm = false; }
+    private async Task ConfirmSkip() { showSkipConfirm = false; await SkipExercise(); }
     private void ShowGiveUpDialog() { showGiveUpDialog = true; }
     private void CloseGiveUpDialog() { showGiveUpDialog = false; }
 
@@ -614,6 +607,7 @@ private TrainingSettings? currentSettings = null;
         if (currentExerciseIndex < exercises.Count)
         {
             exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
+            currentAnswerOptions = _generator!.GetAnswerOptions(exercises[currentExerciseIndex].Exercise);
             StateHasChanged();
         }
         else
@@ -622,101 +616,23 @@ private TrainingSettings? currentSettings = null;
         }
     }
 
-    private string GetHintText()
-    {
-        if (currentExerciseIndex >= exercises.Count) return "";
-        var ex  = exercises[currentExerciseIndex];
-        var a   = ex.Exercise.FirstNumber;
-        var b   = ex.Exercise.SecondNumber;
-        var correct = ex.Exercise.CorrectAnswer;
-        var wrong   = ex.UserAnswer ?? 0;
-        bool isMul  = a * b == correct;
-
-        // Ilustrace n·sobenÌ jako souËet (max 6 Ëlen˘, pak "...")
-        string mulSum = a <= 6
-            ? string.Join(" + ", Enumerable.Repeat(b, a))
-            : string.Join(" + ", Enumerable.Repeat(b, 5)) + " + ...";
-
-        if (isMul)
-        {
-            if (wrong == a && a != correct)
-                return $"Napsal jsi {a} ñ to je prvnÌ n·sobitel, ne v˝sledek. " +
-                       $"{a} ◊ {b} znamen· seËÌst ËÌslo {b} celkem {a}-kr·t: {mulSum}.";
-            if (wrong == b && b != correct)
-                    return $"Napsal jsi {b} ñ to je druh˝ n·sobitel, ne v˝sledek. " +
-                           $"P¯edstav si {a} {NSkupin(a)} po {b}: {mulSum} ñ zkus je vöechny seËÌst.";
-            if (a > 1 && wrong == correct - b)
-                return $"Skoro! Moûn· jsi p¯iËetl {b} jen {a - 1}-kr·t mÌsto {a}-kr·t. " +
-                       $"Zkus jeötÏ jednou od zaË·tku: {mulSum}.";
-            if (wrong == correct + b)
-                return $"Skoro! P¯iËetl jsi {b} jednou navÌc ñ zkus od svÈho v˝sledku odeËÌst {b}.";
-            if (wrong > correct)
-                    return $"V˝sledek je p¯Ìliö velk˝. " +
-                           $"Zkus si p¯Ìklad zapsat jako souËet a poËÌtat pomalu: {mulSum}. SeËti p¯esnÏ {a} {NCisel(a)}.";
-            if (wrong > 0)
-                    return $"V˝sledek je p¯Ìliö mal˝. " +
-                           $"P¯edstav si {a} {NSkupin(a)}, v kaûdÈ je {b}: {mulSum} ñ seËti je.";
-            return $"N·sobenÌ {a} ◊ {b}: seËti ËÌslo {b} celkem {a}-kr·t: {mulSum}.";
-        }
-        else
-        {
-            // DÏlenÌ: a ˜ b = correct
-            if (wrong > a)
-                return $"V˝sledek dÏlenÌ nem˘ûe b˝t vÏtöÌ neû {a} (to je ËÌslo, kterÈ dÏlÌme). " +
-                       $"DÏlenÌm ËÌslo zmenöujeme ñ v˝sledek je maxim·lnÏ {a}.";
-            if (wrong == a)
-                return $"Napsal jsi {a} ñ ale to je ËÌslo, kterÈ dÏlÌme (dÏlenec). " +
-                       $"V˝sledek bude menöÌ. P¯edstav si: m·ö {a} bonbon˘ a d·v·ö je do skupin po {b}. Kolik skupin dostaneö?";
-            if (wrong == b)
-                return $"Napsal jsi {b} ñ ale to je dÏlitel, ne v˝sledek. " +
-                       $"Hled·me, kolikr·t se {b} vejde do {a}. " +
-                       $"Zkus odpoËÌt·vat: {a} \u2192 {a - b} \u2192 {Math.Max(a - 2 * b, 0)}... a poËÌtej kroky.";
-            if (wrong > 0 && wrong * b > a)
-                return $"P¯Ìliö velk˝ v˝sledek. " +
-                       $"ZpÏtn· zkouöka: {wrong} ◊ {b} = {wrong * b}, ale m·me jen {a}. Zkus menöÌ ËÌslo.";
-            if (wrong > 0 && wrong * b < a)
-                return $"P¯Ìliö mal˝ v˝sledek. " +
-                       $"ZpÏtn· zkouöka: {wrong} ◊ {b} = {wrong * b}, ale pot¯ebujeme {a}. Zkus vÏtöÌ ËÌslo.";
-            if (wrong == 0)
-                return $"Nula by znamenala, ûe se {b} do {a} nevejde v˘bec ñ ale vejde se! " +
-                       $"P¯edstav si: m·ö {a} suöenek a skl·d·ö je do balÌËk˘ po {b}. Kolik balÌËk˘ naplnÌö?";
-            return $"DÏlenÌ {a} ˜ {b}: hled·me, kolikr·t se {b} vejde do {a}. " +
-                   $"Zkus odpoËÌt·vat od {a}: {a} \u2192 {a - b} \u2192 {Math.Max(a - 2 * b, 0)}... a poËÌtej, kolik krok˘ jsi udÏlal.";
-        }
-    }
-
     private async Task EndTrainingEarly()
     {
-        Console.WriteLine(">>> TrÈnink ukonËen p¯edËasnÏ!");
         await CompleteSessionAsync();
     }
 
-    // PomocnÈ metody pro spr·vnÈ ËeskÈ tvary p¯i poËÌt·nÌ
-    private static string NSkupin(int n) => n == 1 ? "skupinu" : n <= 4 ? "skupiny" : "skupin";
-    private static string NCisel(int n)  => n == 1 ? "ËÌslo"    : n <= 4 ? "ËÌsla"    : "ËÌsel";
-
     private void GenerateMoreExercises()
     {
-        if (currentSettings == null || durationType != "Time")
+        if (_generator == null || durationType != "Time")
             return;
 
-        Console.WriteLine(">>> Generuji dalöÌch 10 p¯Ìklad˘...");
-        
-        var generator = new ExerciseGenerator();
-        var newExercises = generator.GenerateExercises(
-            10, // Vygenerovat dalöÌch 10
-            currentSettings.IncludedMultipliers,
-            currentSettings.IncludeMultiplication,
-            currentSettings.IncludeDivision
-        );
-
         var startIndex = exercises.Count;
-        foreach (var (ex, idx) in newExercises.Select((ex, idx) => (ex, idx)))
+        for (int i = 0; i < 10; i++)
         {
-            exercises.Add(new SessionExerciseData
+            exercises.Add(new CzechSessionExerciseData
             {
-                Index = startIndex + idx,
-                Exercise = ex,
+                Index = startIndex + i,
+                Exercise = _generator.GenerateExercise(),
                 Attempts = 0,
                 IsCorrect = false,
                 IsSkipped = false,
@@ -724,31 +640,20 @@ private TrainingSettings? currentSettings = null;
                 StartTime = DateTime.UtcNow
             });
         }
-        
-        Console.WriteLine($">>> Celkem p¯Ìklad˘: {exercises.Count}");
     }
-
-    private static string PrikladText(int n) => n switch
-    {
-        1 => "p¯Ìklad",
-        >= 2 and <= 4 => "p¯Ìklady",
-        _ => "p¯Ìklad˘"
-    };
 }
 
 <style>
     .training-session-container {
-        /* position: fixed + top/left/width/height jsou nastaveny JS (trainingLayout.init)
-           p¯esnÏ podle visualViewport ñ funguje korektnÏ p¯i otev¯enÌ kl·vesnice na iOS i Android */
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
-        height: var(--training-vh, 100%); /* fallback neû JS init probÏhne */
+        height: var(--training-vh, 100%);
         display: flex;
         flex-direction: column;
         align-items: center;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #48bb78 0%, #276749 100%);
         padding: 0.75rem 1rem;
         box-sizing: border-box;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -817,20 +722,18 @@ private TrainingSettings? currentSettings = null;
         font-weight: 600;
     }
 
+    /* WORD DISPLAY */
     .exercise-display {
         flex: 1;
         display: flex;
         align-items: center;
         justify-content: center;
         width: 100%;
-        /* min-height drûÌ v˝öku i p¯i p¯echodu na nov˝ p¯Ìklad
-           ñ zabr·nÌ CLS seskoku tlaËÌtek. Hodnota odpovÌd· 1 ¯·dku textu p¯Ìkladu
-           (font-size clamp(2.5rem,12vw,5rem) ◊ line-height 1.2) */
         min-height: clamp(3.2rem, 15vw, 6.5rem);
     }
 
-    .exercise-text {
-        font-size: clamp(2.5rem, 12vw, 5rem);
+    .word-display {
+        font-size: clamp(3rem, 14vw, 6rem);
         font-weight: bold;
         color: white;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
@@ -839,11 +742,82 @@ private TrainingSettings? currentSettings = null;
         animation: exampleIn 0.18s ease;
     }
 
+    .word-before, .word-after {
+        color: white;
+    }
+
+    .word-blank {
+        display: inline-block;
+        width: 0.55em;
+        border-bottom: 4px solid rgba(255, 215, 0, 0.7);
+        margin: 0 0.06em 0.05em;
+        vertical-align: baseline;
+    }
+
+    .word-reveal {
+        animation: revealIn 0.35s ease;
+    }
+
+    .full-word {
+        font-size: clamp(3rem, 14vw, 6rem);
+        font-weight: bold;
+        color: #ffd700;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        letter-spacing: 0.05em;
+    }
+
     @@keyframes exampleIn {
         from { opacity: 0; transform: scale(0.92); }
         to   { opacity: 1; transform: scale(1); }
     }
 
+    @@keyframes revealIn {
+        from { opacity: 0; transform: scale(1.1); }
+        to   { opacity: 1; transform: scale(1); }
+    }
+
+    /* ANSWER BUTTONS */
+    .answer-buttons-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        justify-content: center;
+        width: 100%;
+        max-width: 400px;
+        margin-bottom: 0.75rem;
+    }
+
+    .answer-btn {
+        min-width: 60px;
+        padding: 1rem 1.2rem;
+        font-size: 1.6rem;
+        font-weight: 800;
+        background: rgba(255, 255, 255, 0.95);
+        color: #276749;
+        border: 3px solid rgba(255, 255, 255, 0.8);
+        border-radius: 16px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .answer-btn:hover {
+        transform: scale(1.08);
+        background: white;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .answer-btn:active {
+        transform: scale(0.95);
+    }
+
+    .buttons-only-controls {
+        margin-top: 0.5rem;
+    }
+
+    /* TEXT INPUT */
     .input-container {
         width: 100%;
         max-width: 400px;
@@ -860,12 +834,13 @@ private TrainingSettings? currentSettings = null;
         border-radius: 8px;
         background: white;
         color: #333;
+        text-transform: lowercase;
     }
 
     .answer-input:focus {
         outline: none;
-        border-color: #4CAF50;
-        box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.2);
+        border-color: #ffd700;
+        box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.3);
     }
 
     .wrong-answer {
@@ -883,6 +858,7 @@ private TrainingSettings? currentSettings = null;
         color: #ff9800;
         text-decoration: line-through;
         text-decoration-thickness: 2px;
+        text-transform: uppercase;
     }
 
     .hint-text {
@@ -897,22 +873,6 @@ private TrainingSettings? currentSettings = null;
         justify-content: center;
         flex-wrap: wrap;
         margin-top: 0.4rem;
-    }
-
-    .btn-hint {
-        padding: 0.3rem 0.8rem;
-        font-size: 0.8rem;
-        font-weight: 600;
-        background: rgba(255, 255, 255, 0.15);
-        color: white;
-        border: 1px solid rgba(255, 255, 255, 0.4);
-        border-radius: 20px;
-        cursor: pointer;
-        transition: background 0.15s;
-    }
-
-    .btn-hint:hover {
-        background: rgba(255, 255, 255, 0.25);
     }
 
     .btn-giveup {
@@ -931,61 +891,31 @@ private TrainingSettings? currentSettings = null;
         background: rgba(255, 100, 80, 0.35);
     }
 
-    .hint-modal {
-        max-width: 440px;
-    }
-
-    .hint-dialog-text {
-        font-size: 1rem;
-        color: #333;
-        line-height: 1.65;
-        margin: 0.5rem 0 1.25rem;
-        text-align: left;
-    }
-
-    .solution-box {
-        background: linear-gradient(135deg, #f0f4ff, #e8f0fe);
-        border: 2px solid #667eea;
-        border-radius: 12px;
-        padding: 0.85rem 1.25rem;
-        margin-bottom: 1.25rem;
-        text-align: center;
-    }
-
-    .solution-label {
-        display: block;
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: #667eea;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        margin-bottom: 0.3rem;
-    }
-
-    .solution-text {
-        font-size: 1.6rem;
-        font-weight: 800;
-        color: #333;
-        letter-spacing: 0.03em;
-    }
-
     .correct-answer {
         display: flex;
         align-items: center;
         gap: 1rem;
         flex: 1;
         justify-content: center;
+        flex-wrap: wrap;
     }
 
     .correct-label {
         font-size: 2rem;
-        color: #4CAF50;
+        color: #ffd700;
         font-weight: bold;
     }
 
     .checkmark {
         font-size: 2rem;
-        color: #4CAF50;
+        color: #ffd700;
+    }
+
+    .ambiguous-hint {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.7);
+        width: 100%;
+        text-align: center;
     }
 
     .button-container {
@@ -1008,8 +938,8 @@ private TrainingSettings? currentSettings = null;
         padding: 0.75rem 2rem;
         font-size: 1.1rem;
         font-weight: bold;
-        background: #4CAF50;
-        color: white;
+        background: #ffd700;
+        color: #276749;
         border: 2px solid rgba(255, 255, 255, 0.4);
         border-radius: 8px;
         cursor: pointer;
@@ -1018,7 +948,7 @@ private TrainingSettings? currentSettings = null;
     }
 
     .btn-submit:hover:not(:disabled) {
-        background: #45a049;
+        background: #ffe033;
         transform: scale(1.05);
     }
 
@@ -1056,6 +986,7 @@ private TrainingSettings? currentSettings = null;
         background: rgba(255, 100, 100, 0.25);
     }
 
+    /* MODALS */
     .modal-overlay {
         position: fixed;
         top: 0;
@@ -1089,7 +1020,7 @@ private TrainingSettings? currentSettings = null;
 
     .motivational-text {
         font-size: 1.1rem;
-        color: #4CAF50;
+        color: #48bb78;
         font-weight: 600;
         text-align: center;
         margin: 1rem 0;
@@ -1112,7 +1043,7 @@ private TrainingSettings? currentSettings = null;
         padding: 0.75rem 1.5rem;
         font-size: 1rem;
         font-weight: 600;
-        background: #4CAF50;
+        background: #48bb78;
         color: white;
         border: none;
         border-radius: 8px;
@@ -1121,7 +1052,7 @@ private TrainingSettings? currentSettings = null;
     }
 
     .btn-modal-cancel:hover {
-        background: #45a049;
+        background: #38a169;
         transform: scale(1.02);
     }
 
@@ -1140,26 +1071,55 @@ private TrainingSettings? currentSettings = null;
         background: #e0e0e0;
     }
 
+    .hint-modal {
+        max-width: 440px;
+    }
+
+    .hint-dialog-text {
+        font-size: 1rem;
+        color: #333;
+        line-height: 1.65;
+        margin: 0.5rem 0 1.25rem;
+        text-align: center;
+    }
+
+    .solution-box {
+        background: linear-gradient(135deg, #f0fff4, #c6f6d5);
+        border: 2px solid #48bb78;
+        border-radius: 12px;
+        padding: 0.85rem 1.25rem;
+        margin-bottom: 1.25rem;
+        text-align: center;
+    }
+
+    .solution-label {
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #48bb78;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 0.3rem;
+    }
+
+    .solution-text {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #333;
+        letter-spacing: 0.03em;
+    }
+
     @@keyframes fadeIn {
-        from {
-            opacity: 0;
-        }
-        to {
-            opacity: 1;
-        }
+        from { opacity: 0; }
+        to   { opacity: 1; }
     }
 
     @@keyframes slideUp {
-        from {
-            transform: translateY(50px);
-            opacity: 0;
-        }
-        to {
-            transform: translateY(0);
-            opacity: 1;
-        }
+        from { transform: translateY(50px); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
     }
 
+    /* RESULTS */
     .results-container {
         background: white;
         padding: 2rem;
@@ -1176,7 +1136,7 @@ private TrainingSettings? currentSettings = null;
     .results-container h1 {
         font-size: 2.5rem;
         margin-bottom: 1.5rem;
-        color: #4CAF50;
+        color: #48bb78;
     }
 
     .results-summary {
@@ -1199,6 +1159,36 @@ private TrainingSettings? currentSettings = null;
         font-weight: bold;
         color: #333;
         font-size: 1.1rem;
+    }
+
+    .btn-primary {
+        background-color: #48bb78;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .btn-primary:hover {
+        background-color: #38a169;
+    }
+
+    .btn-secondary {
+        background-color: #2196F3;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+
+    .btn-secondary:hover {
+        background-color: #0b7dda;
     }
 
     .results-actions {
@@ -1265,6 +1255,7 @@ private TrainingSettings? currentSettings = null;
         color: #a0aec0;
         font-weight: 500;
     }
+
     @@media (max-width: 480px) {
         .training-session-container {
             padding: 0.5rem 0.75rem;
@@ -1272,6 +1263,12 @@ private TrainingSettings? currentSettings = null;
 
         .answer-input {
             padding: 0.6rem;
+            font-size: 1.3rem;
+        }
+
+        .answer-btn {
+            min-width: 50px;
+            padding: 0.8rem 1rem;
             font-size: 1.3rem;
         }
 

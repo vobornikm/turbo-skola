@@ -1,0 +1,876 @@
+@page "/training/prepared"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@using TurboSkola.Data.Models
+@using TurboSkola.Utilities
+@using System.Text.Json
+@inject IPreparedTrainingService PreparedTrainingService
+@inject IProfileService ProfileService
+@inject ISessionService SessionService
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Připravené tréninky - Turbo Škola</PageTitle>
+
+<div class="prepared-container">
+
+    <div class="prepared-header">
+        <a href="/training" class="back-link">← Zpět na výběr</a>
+        <h1>📋 Připravené tréninky</h1>
+        <p class="subtitle">
+            @if (ProfileService.IsCurrentProfileParent)
+            {
+                <span>Tréninky, které jsi připravil/a pro děti</span>
+            }
+            else
+            {
+                <span>Tréninky připravené speciálně pro tebe!</span>
+            }
+        </p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading-state">
+            <p>Načítám tréninky...</p>
+        </div>
+    }
+    else if (ProfileService.IsCurrentProfileParent)
+    {
+        <!-- RODIČOVSKÝ PŘEHLED -->
+        @if (createdTrainings == null || createdTrainings.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">📋</div>
+                <h2>Zatím žádné připravené tréninky</h2>
+                <p>Jděte do nastavení libovolného tréninku a klikněte na „Připravit trénink pro dítě".</p>
+                <a href="/training" class="btn-go-training">🚀 Jít na tréninky</a>
+            </div>
+        }
+        else
+        {
+            <div class="parent-stats">
+                <div class="stat-chip pending">⏳ @createdTrainings.Count(t => t.Status == "Pending") čekajících</div>
+                <div class="stat-chip progress">🔄 @createdTrainings.Count(t => t.Status == "InProgress") probíhá</div>
+                <div class="stat-chip completed">✅ @createdTrainings.Count(t => t.Status == "Completed") splněno</div>
+            </div>
+
+            <!-- Přepínač archiv -->
+            <div class="archive-toggle" @onclick="ToggleShowArchived">
+                <span>@(showArchived ? "🗂️ Skrýt archiv" : "🗂️ Zobrazit archiv (@archivedCount)")</span>
+            </div>
+
+            @foreach (var group in createdTrainings.GroupBy(t => t.AssignedToProfile.ProfileId))
+            {
+                var firstProfile = group.First().AssignedToProfile;
+                var childBatches = GetOrderedBatches(firstProfile.ProfileId, group.ToList());
+
+                <div class="child-group">
+                    <h2 class="child-group-title">
+                        <span class="child-group-avatar" style="background-color: @firstProfile.AvatarColor">
+                            @((MarkupString)AvatarHelper.GetIcon(firstProfile.AvatarIcon))
+                        </span>
+                        @firstProfile.ProfileName
+                    </h2>
+
+                    @for (int bi = 0; bi < childBatches.Count; bi++)
+                    {
+                        var items = childBatches[bi];
+                        var first = items.First();
+                        var batchKey = first.BatchId ?? first.PreparedTrainingId.ToString();
+                        var pendingCount = items.Count(t => t.Status == "Pending");
+                        var inProgressCount = items.Count(t => t.Status == "InProgress");
+                        var completedCount = items.Count(t => t.Status == "Completed");
+                        var totalCount = items.Count(t => t.Status != "Cancelled" && t.Status != "Archived");
+                        var allCompleted = totalCount > 0 && completedCount == totalCount;
+                        var idx = bi;
+                        var profileId = firstProfile.ProfileId;
+
+                        @if (totalCount == 0)
+                        {
+                            <!-- Prázdný / plně zrušený batch — nabídnout smazání -->
+                            <div class="batch-card batch-empty">
+                                <div class="batch-header">
+                                    <span class="batch-icon">@GetTrainingIcon(first.TrainingTypeCode)</span>
+                                    <div class="batch-info">
+                                        <div class="batch-title">@GetTrainingName(first.TrainingTypeCode)</div>
+                                        <div class="batch-meta" style="color: #a0aec0;">Všechny položky zrušeny</div>
+                                    </div>
+                                </div>
+                                <div class="batch-actions">
+                                    @if (first.BatchId != null)
+                                    {
+                                        <button class="btn-cancel-batch" @onclick="() => DeleteBatch(first.BatchId!)">
+                                            🗑️ Smazat
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                        <div class="batch-card @(allCompleted ? "batch-done" : "")">
+                            <div class="batch-header">
+                                <span class="batch-icon">@GetTrainingIcon(first.TrainingTypeCode)</span>
+                                <div class="batch-info">
+                                    <div class="batch-title">@GetTrainingName(first.TrainingTypeCode)</div>
+                                    <div class="batch-meta">
+                                        Vytvořeno @first.CreatedDate.ToLocalTime().ToString("d. M. yyyy")
+                                        @if (!string.IsNullOrEmpty(first.Note))
+                                        {
+                                            <span class="batch-note">💬 @first.Note</span>
+                                        }
+                                    </div>
+                                </div>
+                                @if (childBatches.Count > 1 && !allCompleted)
+                                {
+                                    <div class="batch-reorder">
+                                        <button class="btn-reorder @(idx == 0 ? "disabled" : "")" disabled="@(idx == 0)"
+                                                @onclick="() => MoveBatchUp(profileId, idx)">▲</button>
+                                        <button class="btn-reorder @(idx == childBatches.Count - 1 ? "disabled" : "")" disabled="@(idx == childBatches.Count - 1)"
+                                                @onclick="() => MoveBatchDown(profileId, idx)">▼</button>
+                                    </div>
+                                }
+                            </div>
+                            <div class="batch-progress">
+                                <div class="progress-bar">
+                                    <div class="progress-fill @(allCompleted ? "fill-done" : "")" style="width: @(totalCount > 0 ? (completedCount * 100 / totalCount) : 0)%"></div>
+                                </div>
+                                <span class="progress-text">@completedCount / @totalCount splněno</span>
+                            </div>
+                            <div class="batch-actions">
+                                @if (allCompleted && first.BatchId != null)
+                                {
+                                    <a href="/stats" class="btn-batch-action btn-stats">
+                                        📊 Statistiky
+                                    </a>
+                                    <button class="btn-batch-action btn-archive" @onclick="() => ArchiveBatch(first.BatchId!)">
+                                        ✓ Archivovat
+                                    </button>
+                                }
+                                else if (first.BatchId != null)
+                                {
+                                    @if (pendingCount > 0)
+                                    {
+                                        <button class="btn-cancel-batch" @onclick="() => CancelBatch(first.BatchId!)">
+                                            🗑️ Zrušit zbývajících @pendingCount
+                                        </button>
+                                    }
+                                    @if (inProgressCount > 0 && pendingCount == 0)
+                                    {
+                                        <button class="btn-cancel-batch" @onclick="() => ResetInProgressBatch(first.BatchId!)">
+                                            ↩️ Vrátit @inProgressCount rozpracovaných
+                                        </button>
+                                    }
+                                }
+                            </div>
+                        </div>
+                        }
+                    }
+                </div>
+            }
+        }
+    }
+    else
+    {
+        <!-- DĚTSKÝ POHLED -->
+        @if (pendingTrainings == null || pendingTrainings.Count == 0)
+        {
+            <div class="empty-state child-empty">
+                <div class="empty-icon">🌟</div>
+                <h2>Žádné tréninky nečekají</h2>
+                <p>Super! Všechno máš splněno. Ale můžeš si jít zatrénovat sám/sama!</p>
+                <a href="/training" class="btn-go-training">🚀 Jít trénovat</a>
+            </div>
+        }
+        else
+        {
+            <div class="pending-banner">
+                <span class="pending-count">@pendingTrainings.Count</span>
+                <span>@TreninkText(pendingTrainings.Count) na tebe @CekaText(pendingTrainings.Count)!</span>
+            </div>
+
+            <div class="trainings-list">
+                @foreach (var training in pendingTrainings)
+                {
+                    <div class="training-item @(training.Status == "InProgress" ? "in-progress" : "")" @onclick="() => StartTraining(training)">
+                        <div class="training-item-icon">@GetTrainingIcon(training.TrainingTypeCode)</div>
+                        <div class="training-item-body">
+                            <h3>@GetTrainingName(training.TrainingTypeCode)</h3>
+                            @if (!string.IsNullOrEmpty(training.Note))
+                            {
+                                <div class="training-note">
+                                    💬 <em>@training.CreatedByProfile?.ProfileName říká:</em> @training.Note
+                                </div>
+                            }
+                            @if (training.Status == "InProgress")
+                            {
+                                <span class="status-badge in-progress-badge">🔄 Rozpracováno</span>
+                            }
+                            else
+                            {
+                                <span class="status-badge pending-badge">⏳ Čeká na tebe</span>
+                            }
+                        </div>
+                        <div class="training-item-arrow">›</div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<PreparedTraining>? pendingTrainings;
+    private List<PreparedTraining>? createdTrainings;
+    private bool isLoading = true;
+    private bool showArchived = false;
+    private int archivedCount = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated || !ProfileService.CurrentProfileId.HasValue)
+        {
+            Navigation.NavigateTo("/profile/select");
+            return;
+        }
+
+        var profileId = ProfileService.CurrentProfileId.Value;
+        await PreparedTrainingService.AutoCompleteInProgressAsync(profileId);
+
+        if (ProfileService.IsCurrentProfileParent)
+        {
+            await RefreshParentDataAsync();
+        }
+        else
+        {
+            pendingTrainings = await PreparedTrainingService.GetPendingForProfileAsync(profileId);
+        }
+        isLoading = false;
+    }
+
+    private async Task RefreshParentDataAsync()
+    {
+        if (!ProfileService.CurrentProfileId.HasValue) return;
+        var allTrainings = await PreparedTrainingService.GetCreatedByProfileAsync(ProfileService.CurrentProfileId.Value, includeArchived: true);
+        archivedCount = allTrainings.Count(t => t.Status == "Archived");
+        createdTrainings = showArchived ? allTrainings : allTrainings.Where(t => t.Status != "Archived").ToList();
+    }
+
+    private async Task ToggleShowArchived()
+    {
+        showArchived = !showArchived;
+        await RefreshParentDataAsync();
+        StateHasChanged();
+    }
+
+    private async Task StartTraining(PreparedTraining training)
+    {
+        // Mark as InProgress
+        await PreparedTrainingService.MarkAsStartedAsync(training.PreparedTrainingId);
+
+        // Set active prepared training for auto-completion tracking
+        SessionService.SetActivePreparedTraining(training.PreparedTrainingId);
+
+        // Deserialize settings and navigate to appropriate session
+        switch (training.TrainingTypeCode)
+        {
+            case "SMALL_MULTIPLICATION":
+                var multSettings = JsonSerializer.Deserialize<TrainingSettings>(training.SettingsJson);
+                if (multSettings != null) SessionService.SetCurrentSettings(multSettings);
+                Navigation.NavigateTo("/training/session");
+                break;
+
+            case "ADD_SUB_100":
+                var addSubSettings = JsonSerializer.Deserialize<AddSubTrainingSettings>(training.SettingsJson);
+                if (addSubSettings != null) SessionService.SetCurrentAddSubSettings(addSubSettings);
+                Navigation.NavigateTo("/training/addsub/session");
+                break;
+
+            case "PAIRED_CONSONANTS":
+                var pairedSettings = JsonSerializer.Deserialize<PairedConsonantsTrainingSettings>(training.SettingsJson);
+                if (pairedSettings != null) SessionService.SetCurrentPairedConsonantsSettings(pairedSettings);
+                Navigation.NavigateTo("/training/czech/paired-consonants/session");
+                break;
+
+            default:
+                Navigation.NavigateTo("/training");
+                break;
+        }
+    }
+
+    private async Task CancelBatch(string batchId)
+    {
+        await PreparedTrainingService.CancelBatchAsync(batchId);
+        await RefreshParentDataAsync();
+        StateHasChanged();
+    }
+
+    private async Task DeleteBatch(string batchId)
+    {
+        await PreparedTrainingService.DeleteBatchAsync(batchId);
+        await RefreshParentDataAsync();
+        StateHasChanged();
+    }
+
+    private async Task ResetInProgressBatch(string batchId)
+    {
+        await PreparedTrainingService.ResetInProgressBatchAsync(batchId);
+        await RefreshParentDataAsync();
+        StateHasChanged();
+    }
+
+    private async Task ArchiveBatch(string batchId)
+    {
+        await PreparedTrainingService.ArchiveBatchAsync(batchId);
+        await RefreshParentDataAsync();
+        StateHasChanged();
+    }
+
+    private static string GetTrainingIcon(string code) => code switch
+    {
+        "SMALL_MULTIPLICATION" => "✖️",
+        "ADD_SUB_100" => "➕",
+        "PAIRED_CONSONANTS" => "🔤",
+        _ => "📝"
+    };
+
+    private static string GetTrainingName(string code) => code switch
+    {
+        "SMALL_MULTIPLICATION" => "Malá násobilka",
+        "ADD_SUB_100" => "Sčítání a odčítání do 100",
+        "PAIRED_CONSONANTS" => "Párové souhlásky",
+        _ => "Trénink"
+    };
+
+    private static string TreninkText(int n) => n switch
+    {
+        1 => "trénink",
+        >= 2 and <= 4 => "tréninky",
+        _ => "tréninků"
+    };
+
+    private static string CekaText(int n) => n switch
+    {
+        1 => "čeká",
+        _ => "čeká"
+    };
+
+    // Batch ordering per child (keyed by profileId)
+    private Dictionary<int, List<string>> _batchOrderMap = new();
+
+    private List<List<PreparedTraining>> GetOrderedBatches(int childProfileId, List<PreparedTraining> items)
+    {
+        var batches = items
+            .GroupBy(t => t.BatchId ?? t.PreparedTrainingId.ToString())
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        if (!_batchOrderMap.ContainsKey(childProfileId))
+        {
+            _batchOrderMap[childProfileId] = batches.Keys.ToList();
+        }
+        else
+        {
+            var existing = _batchOrderMap[childProfileId];
+            foreach (var key in batches.Keys.Where(k => !existing.Contains(k)))
+                existing.Add(key);
+            existing.RemoveAll(k => !batches.ContainsKey(k));
+        }
+
+        return _batchOrderMap[childProfileId]
+            .Where(k => batches.ContainsKey(k))
+            .Select(k => batches[k])
+            .ToList();
+    }
+
+    private async Task MoveBatchUp(int childProfileId, int index)
+    {
+        if (!_batchOrderMap.ContainsKey(childProfileId) || index <= 0) return;
+        var list = _batchOrderMap[childProfileId];
+        (list[index - 1], list[index]) = (list[index], list[index - 1]);
+        StateHasChanged();
+        if (ProfileService.CurrentProfileId.HasValue)
+            await PreparedTrainingService.SaveBatchOrderAsync(ProfileService.CurrentProfileId.Value, childProfileId, list);
+    }
+
+    private async Task MoveBatchDown(int childProfileId, int index)
+    {
+        if (!_batchOrderMap.ContainsKey(childProfileId)) return;
+        var list = _batchOrderMap[childProfileId];
+        if (index >= list.Count - 1) return;
+        (list[index], list[index + 1]) = (list[index + 1], list[index]);
+        StateHasChanged();
+        if (ProfileService.CurrentProfileId.HasValue)
+            await PreparedTrainingService.SaveBatchOrderAsync(ProfileService.CurrentProfileId.Value, childProfileId, list);
+    }
+}
+
+<style>
+    .prepared-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 1.5rem 1rem;
+        min-height: 100vh;
+    }
+
+    .prepared-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .back-link {
+        display: inline-block;
+        color: #667eea;
+        text-decoration: none;
+        font-size: 0.95rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .back-link:hover {
+        text-decoration: underline;
+    }
+
+    .prepared-header h1 {
+        margin: 0 0 0.5rem 0;
+        font-size: 2rem;
+        color: #2d3748;
+    }
+
+    .subtitle {
+        color: #718096;
+        font-size: 1rem;
+        margin: 0;
+    }
+
+    .loading-state {
+        text-align: center;
+        color: #718096;
+        padding: 3rem;
+    }
+
+    /* Empty states */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+    }
+
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+    }
+
+    .empty-state h2 {
+        margin: 0 0 0.5rem 0;
+        color: #2d3748;
+    }
+
+    .empty-state p {
+        color: #718096;
+        margin-bottom: 1.5rem;
+    }
+
+    .btn-go-training {
+        display: inline-block;
+        padding: 0.75rem 2rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        text-decoration: none;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 1.05rem;
+        transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .btn-go-training:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    /* Child - Pending banner */
+    .pending-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border-radius: 14px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .pending-count {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 42px;
+        height: 42px;
+        background: rgba(255, 255, 255, 0.25);
+        border-radius: 50%;
+        font-size: 1.4rem;
+        font-weight: 800;
+    }
+
+    /* Training items */
+    .trainings-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+    }
+
+    .training-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.1rem 1.25rem;
+        background: white;
+        border-radius: 14px;
+        border: 2px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        transition: all 0.15s;
+        cursor: pointer;
+    }
+
+    .training-item:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .training-item:active {
+        transform: translateY(0);
+    }
+
+    .training-item.in-progress {
+        border-color: #ed8936;
+        background: #fffaf0;
+    }
+
+    .training-item-icon {
+        font-size: 2rem;
+        flex-shrink: 0;
+    }
+
+    .training-item-body {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .training-item-body h3 {
+        margin: 0 0 0.25rem 0;
+        font-size: 1.05rem;
+        color: #2d3748;
+    }
+
+    .training-note {
+        font-size: 0.85rem;
+        color: #718096;
+        margin-bottom: 0.35rem;
+        padding: 0.3rem 0.5rem;
+        background: #f7fafc;
+        border-radius: 6px;
+    }
+
+    .status-badge {
+        display: inline-block;
+        font-size: 0.78rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+
+    .pending-badge {
+        background: #edf2f7;
+        color: #4a5568;
+    }
+
+    .in-progress-badge {
+        background: #feebc8;
+        color: #c05621;
+    }
+
+    .training-item-arrow {
+        font-size: 2rem;
+        color: #cbd5e0;
+        font-weight: bold;
+        flex-shrink: 0;
+        transition: color 0.15s;
+    }
+
+    .training-item:hover .training-item-arrow {
+        color: #667eea;
+    }
+
+    /* Batch reorder buttons */
+    .batch-reorder {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        flex-shrink: 0;
+    }
+
+    .btn-reorder {
+        width: 28px;
+        height: 22px;
+        border: 1px solid #e2e8f0;
+        background: #f7fafc;
+        color: #718096;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.65rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+        padding: 0;
+    }
+
+    .btn-reorder:hover:not(.disabled) {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+
+    .btn-reorder.disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+
+    /* Parent stats */
+    .parent-stats {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .stat-chip {
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        line-height: 1.4;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        min-height: 2rem;
+        box-sizing: border-box;
+    }
+
+    .stat-chip.pending {
+        background: #edf2f7;
+        color: #4a5568;
+    }
+
+    .stat-chip.progress {
+        background: #feebc8;
+        color: #c05621;
+    }
+
+    .stat-chip.completed {
+        background: #c6f6d5;
+        color: #276749;
+    }
+
+    /* Child group */
+    .child-group {
+        margin-bottom: 2rem;
+    }
+
+    .child-group-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.2rem;
+        color: #2d3748;
+        margin-bottom: 1rem;
+    }
+
+    .child-group-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+    }
+
+    /* Batch card */
+    .batch-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    }
+
+    .batch-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .batch-icon {
+        font-size: 1.6rem;
+    }
+
+    .batch-info {
+        flex: 1;
+    }
+
+    .batch-title {
+        font-weight: 600;
+        color: #2d3748;
+    }
+
+    .batch-meta {
+        font-size: 0.85rem;
+        color: #a0aec0;
+    }
+
+    .batch-note {
+        display: inline-block;
+        margin-left: 0.5rem;
+        color: #718096;
+    }
+
+    .batch-progress {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .progress-bar {
+        flex: 1;
+        height: 8px;
+        background: #edf2f7;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #48bb78, #38a169);
+        border-radius: 4px;
+        transition: width 0.3s;
+    }
+
+    .progress-text {
+        font-size: 0.85rem;
+        color: #4a5568;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .btn-cancel-batch {
+        margin-top: 0.75rem;
+        padding: 0.4rem 0.85rem;
+        border: 1px solid #feb2b2;
+        background: #fff5f5;
+        color: #c53030;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .btn-cancel-batch:hover {
+        background: #fed7d7;
+    }
+
+    /* Archive toggle */
+    .archive-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.85rem;
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        color: #718096;
+        font-size: 0.85rem;
+        cursor: pointer;
+        margin-bottom: 1.5rem;
+        transition: all 0.15s;
+    }
+
+    .archive-toggle:hover {
+        border-color: #667eea;
+        color: #667eea;
+    }
+
+    /* Batch done style */
+    .batch-card.batch-done {
+        border-color: #c6f6d5;
+        background: #f0fff4;
+    }
+
+    .batch-card.batch-empty {
+        border-color: #e2e8f0;
+        background: #f7fafc;
+        opacity: 0.7;
+    }
+
+    .progress-fill.fill-done {
+        background: linear-gradient(90deg, #48bb78, #38a169);
+    }
+
+    .batch-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .btn-batch-action {
+        padding: 0.4rem 0.85rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.15s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    .btn-stats {
+        background: #ebf4ff;
+        color: #3182ce;
+        border: 1px solid #bee3f8;
+    }
+
+    .btn-stats:hover {
+        background: #bee3f8;
+    }
+
+    .btn-archive {
+        background: #f0fff4;
+        color: #276749;
+        border: 1px solid #c6f6d5;
+    }
+
+    .btn-archive:hover {
+        background: #c6f6d5;
+    }
+
+    @@media (max-width: 480px) {
+        .prepared-header h1 {
+            font-size: 1.5rem;
+        }
+
+        .parent-stats {
+            flex-direction: column;
+        }
+
+        .training-item {
+            padding: 0.85rem;
+        }
+    }
+</style>

@@ -39,5 +39,7 @@ public class UserProfile
 
     public ICollection<UserSettings> Settings { get; set; } = new List<UserSettings>();
     public ICollection<TrainingSession> TrainingSessions { get; set; } = new List<TrainingSession>();
+    public ICollection<PreparedTraining> PreparedTrainingsCreated { get; set; } = new List<PreparedTraining>();
+    public ICollection<PreparedTraining> PreparedTrainingsAssigned { get; set; } = new List<PreparedTraining>();
 }
 

@@ -45,19 +45,29 @@
                     <span class="result-value">@(totalExercisesSeen > 0 ? Math.Round((double)correctFirstAttempt / totalExercisesSeen * 100) : 0)%</span>
                 </div>
             </div>
-            <button class="btn-primary" @onclick="GoHome" disabled="@isSaving">
-                @if (isSaving)
-                {
-                    <span>&#x27F3; Ukládám...</span>
-                }
-                else
-                {
-                    <span>&#x2190; Zpět na domů</span>
-                }
-            </button>
-            <button class="btn-secondary" @onclick="StartNewTraining" disabled="@isSaving">
-                Další trénink &#x2192;
-            </button>
+            <div class="results-actions">
+                <button class="btn-result-primary" @onclick="NextTraining" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <span>&#x27F3; Ukládám...</span>
+                    }
+                    else
+                    {
+                        <span>&#x1F680; Další trénink</span>
+                    }
+                </button>
+                <div class="results-ghost-row">
+                    <button class="btn-result-ghost" @onclick="GoToStats" disabled="@isSaving">
+                        &#x1F4CA; Zobrazit odpovědi
+                    </button>
+                    <button class="btn-result-ghost" @onclick="GoToTrainingHub" disabled="@isSaving">
+                        &#x1F500; Jiný trénink
+                    </button>
+                </div>
+                <button class="btn-result-ghost full-width" @onclick="GoHome" disabled="@isSaving">
+                    &#x1F3E0; Zpět na domů
+                </button>
+            </div>
         </div>
     }
     else if (currentExerciseIndex < exercises.Count)
@@ -70,8 +80,13 @@
             @if (showDetails)
             {
                 <div class="details-panel">
-                    <span>@(currentExerciseIndex + 1) / @exercises.Count</span>
-                    <span>@TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss") / @TimeSpan.FromSeconds(durationSeconds).ToString(@"mm\:ss")</span>
+                    <span class="detail-mode">@((MarkupString)(durationType == "Time" ? "&#x23F1; Čas" : "&#x1F522; Počet"))</span>
+                    <span class="detail-item @(durationType == "Count" ? "detail-limit" : "")">
+                        @(completedExercises)@(durationType == "Count" ? $" / {exercises.Count}" : "") příkladů
+                    </span>
+                    <span class="detail-item @(durationType == "Time" ? "detail-limit" : "")">
+                        @TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss")@(durationType == "Time" ? $" / {TimeSpan.FromSeconds(durationSeconds).ToString(@"mm\:ss")}" : "")
+                    </span>
                 </div>
             }
 
@@ -416,8 +431,17 @@
 
         try
         {
-            await TrainingService.CompleteSessionAsync(sessionId, correctFirstAttempt, exercises.Sum(e => e.Attempts), exercisesToSave);
-            Console.WriteLine("Session saved successfully!");
+            if (totalExercisesSeen == 0)
+            {
+                // No exercises attempted — delete the empty session
+                await TrainingService.DeleteSessionAsync(sessionId);
+                Console.WriteLine("Empty session deleted.");
+            }
+            else
+            {
+                await TrainingService.CompleteSessionAsync(sessionId, correctFirstAttempt, exercises.Sum(e => e.Attempts), exercisesToSave);
+                Console.WriteLine("Session saved successfully!");
+            }
         }
         catch (Exception ex)
         {
@@ -433,7 +457,22 @@
 
     private void GoHome() => Navigation.NavigateTo("/");
 
-    private void StartNewTraining() => Navigation.NavigateTo("/training/addsub/setup");
+    private void GoToStats() => Navigation.NavigateTo($"/stats?session={sessionId}");
+
+    private void GoToTrainingHub() => Navigation.NavigateTo("/training");
+
+    private void NextTraining()
+    {
+        if (SessionService.ActivePreparedTrainingId.HasValue)
+        {
+            SessionService.ClearActivePreparedTraining();
+            Navigation.NavigateTo("/training/prepared");
+        }
+        else
+        {
+            Navigation.NavigateTo("/training/addsub/setup");
+        }
+    }
 
     private async Task UpdateTimer()
     {
@@ -738,11 +777,33 @@
     .details-panel {
         width: 100%;
         display: flex;
-        justify-content: space-between;
-        color: rgba(255, 255, 255, 0.7);
-        font-size: 0.9rem;
-        margin-bottom: 1rem;
-        padding: 0 1rem;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.82rem;
+        margin-bottom: 0.75rem;
+        padding: 0 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .detail-mode {
+        background: rgba(255, 255, 255, 0.15);
+        padding: 0.15rem 0.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.85);
+        letter-spacing: 0.02em;
+    }
+
+    .detail-item {
+        white-space: nowrap;
+    }
+
+    .detail-item.detail-limit {
+        color: rgba(255, 255, 255, 0.9);
+        font-weight: 600;
     }
 
     .exercise-display {
@@ -1181,6 +1242,71 @@
 
     .btn-secondary:hover {
         background-color: #0b7dda;
+    }
+
+    .results-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+        width: 100%;
+        max-width: 360px;
+        margin: 0 auto;
+    }
+
+    .btn-result-primary {
+        width: 100%;
+        padding: 0.85rem 1.5rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 1.1rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .btn-result-primary:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-result-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .results-ghost-row {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-result-ghost {
+        flex: 1;
+        padding: 0.65rem 0.75rem;
+        background: transparent;
+        color: #667eea;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .btn-result-ghost:hover:not(:disabled) {
+        border-color: #667eea;
+        background: rgba(102, 126, 234, 0.05);
+    }
+
+    .btn-result-ghost:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-result-ghost.full-width {
+        color: #a0aec0;
+        font-weight: 500;
     }
 
     @@media (max-width: 480px) {

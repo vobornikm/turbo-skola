@@ -38,12 +38,35 @@ public class AddSubTrainingSettings
     public bool IncludeMultipleNumbers { get; set; } = false;
 }
 
+public class PairedConsonantsTrainingSettings
+{
+    public string DurationType { get; set; } = "Time";
+    public int DurationValue { get; set; } = 5;
+
+    // Vybrané páry souhlásek
+    public List<string> SelectedPairs { get; set; } = ["B_P", "D_T", "Z_S", "V_F"];
+
+    // Pozice hlásky: "End" = konec slova, "Middle" = uprostřed, "Both" = obojí
+    public string SoundPosition { get; set; } = "Both";
+
+    // Zobrazit tlačítka odpovědí místo textového vstupu
+    public bool ShowAnswerButtons { get; set; } = true;
+
+    // Zobrazit tlačítka všech variant (všech vybraných párů)
+    public bool ShowAllVariantsButtons { get; set; } = false;
+
+    // Zobrazit celé slovo po správné odpovědi
+    public bool ShowFullWordAfterAnswer { get; set; } = true;
+}
+
 public interface ISettingsService
 {
     Task<TrainingSettings> GetProfileSettingsAsync(int? profileId);
     Task SaveProfileSettingsAsync(int profileId, TrainingSettings settings);
     Task<AddSubTrainingSettings> GetAddSubSettingsAsync(int? profileId);
     Task SaveAddSubSettingsAsync(int profileId, AddSubTrainingSettings settings);
+    Task<PairedConsonantsTrainingSettings> GetPairedConsonantsSettingsAsync(int? profileId);
+    Task SavePairedConsonantsSettingsAsync(int profileId, PairedConsonantsTrainingSettings settings);
 }
 
 public class SettingsService : ISettingsService
@@ -126,6 +149,36 @@ public class SettingsService : ISettingsService
         }
 
         userSettings.AddSubSettingsJson = JsonSerializer.Serialize(settings);
+        userSettings.LastModified = DateTime.UtcNow;
+
+        _dbContext.UserSettings.Update(userSettings);
+        await _dbContext.SaveChangesAsync();
+    }
+
+    public async Task<PairedConsonantsTrainingSettings> GetPairedConsonantsSettingsAsync(int? profileId)
+    {
+        if (!profileId.HasValue)
+            return new PairedConsonantsTrainingSettings();
+
+        var userSettings = await _dbContext.UserSettings.FirstOrDefaultAsync(s => s.ProfileId == profileId);
+
+        if (userSettings?.PairedConsonantsSettingsJson == null)
+            return new PairedConsonantsTrainingSettings();
+
+        return JsonSerializer.Deserialize<PairedConsonantsTrainingSettings>(userSettings.PairedConsonantsSettingsJson)
+               ?? new PairedConsonantsTrainingSettings();
+    }
+
+    public async Task SavePairedConsonantsSettingsAsync(int profileId, PairedConsonantsTrainingSettings settings)
+    {
+        var userSettings = await _dbContext.UserSettings.FirstOrDefaultAsync(s => s.ProfileId == profileId);
+        if (userSettings == null)
+        {
+            userSettings = new UserSettings { ProfileId = profileId };
+            _dbContext.UserSettings.Add(userSettings);
+        }
+
+        userSettings.PairedConsonantsSettingsJson = JsonSerializer.Serialize(settings);
         userSettings.LastModified = DateTime.UtcNow;
 
         _dbContext.UserSettings.Update(userSettings);

@@ -3,6 +3,8 @@
 @using TurboSkola.Services
 @using TurboSkola.Data.Models
 @inject ITrainingService TrainingService
+@inject IPreparedTrainingService PreparedTrainingService
+@inject IProfileService ProfileService
 @inject IAuthService AuthService
 @inject NavigationManager Navigation
 
@@ -13,6 +15,29 @@
         <h1>🚀 Vyber si trénink</h1>
         <p class="hub-subtitle">Procvičuj různé předměty a posouvej se dál</p>
     </div>
+
+    @if (pendingCount > 0 && !ProfileService.IsCurrentProfileParent)
+    {
+        <div class="prepared-banner" @onclick="GoToPrepared">
+            <div class="prepared-banner-icon">
+                <span class="prepared-count">@pendingCount</span>
+            </div>
+            <div class="prepared-banner-text">
+                <strong>Máš připravené tréninky! 🎯</strong>
+                <span>@pendingCount @TreninkText(pendingCount) na tebe @(pendingCount == 1 ? "čeká" : "čeká")</span>
+            </div>
+            <div class="prepared-banner-arrow">›</div>
+        </div>
+    }
+
+    @if (ProfileService.IsCurrentProfileParent)
+    {
+        <div class="parent-prepared-link" @onclick="GoToPrepared">
+            <span>📋</span>
+            <span>Přehled připravených tréninků</span>
+            <span class="prepared-banner-arrow">›</span>
+        </div>
+    }
 
     @if (groupedTrainings == null)
     {
@@ -56,6 +81,7 @@
 
 @code {
     private List<(Subject Subject, List<TrainingType> Trainings)>? groupedTrainings;
+    private int pendingCount = 0;
 
     protected override async Task OnInitializedAsync()
     {
@@ -64,6 +90,13 @@
             .GroupBy(t => t.Subject.SubjectId)
             .Select(g => (g.First().Subject, g.ToList()))
             .ToList();
+
+        // Check for pending prepared trainings
+        if (ProfileService.CurrentProfileId.HasValue)
+        {
+            await PreparedTrainingService.AutoCompleteInProgressAsync(ProfileService.CurrentProfileId.Value);
+            pendingCount = await PreparedTrainingService.GetPendingCountForProfileAsync(ProfileService.CurrentProfileId.Value);
+        }
     }
 
     private void NavigateToSetup(string code)
@@ -72,10 +105,23 @@
         {
             "SMALL_MULTIPLICATION" => "/training/setup",
             "ADD_SUB_100" => "/training/addsub/setup",
+            "PAIRED_CONSONANTS" => "/training/czech/paired-consonants/setup",
             _ => "/training"
         };
         Navigation.NavigateTo(url);
     }
+
+    private void GoToPrepared()
+    {
+        Navigation.NavigateTo("/training/prepared");
+    }
+
+    private static string TreninkText(int n) => n switch
+    {
+        1 => "trénink",
+        >= 2 and <= 4 => "tréninky",
+        _ => "tréninků"
+    };
 
     private static string GetSubjectIcon(string code) => code switch
     {
@@ -88,6 +134,7 @@
     {
         "SMALL_MULTIPLICATION" => "\u2716\uFE0F", // ✖️
         "ADD_SUB_100"          => "\u2795",        // ➕
+        "PAIRED_CONSONANTS"    => "\U0001F524",    // 🔤
         _                      => "\U0001F4DD"      // 📝
     };
 }
@@ -210,6 +257,100 @@
 
     .training-card:hover .training-card-arrow {
         color: var(--card-color, #667eea);
+    }
+
+    /* Prepared trainings banner */
+    .prepared-banner {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border-radius: 14px;
+        cursor: pointer;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        transition: transform 0.15s, box-shadow 0.15s;
+        animation: pulseGlow 2s infinite;
+    }
+
+    .prepared-banner:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    }
+
+    @@keyframes pulseGlow {
+        0%, 100% { box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); }
+        50% { box-shadow: 0 4px 25px rgba(102, 126, 234, 0.5); }
+    }
+
+    .prepared-banner-icon {
+        flex-shrink: 0;
+    }
+
+    .prepared-count {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 42px;
+        height: 42px;
+        background: rgba(255, 255, 255, 0.25);
+        border-radius: 50%;
+        font-size: 1.4rem;
+        font-weight: 800;
+    }
+
+    .prepared-banner-text {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+    }
+
+    .prepared-banner-text strong {
+        font-size: 1.05rem;
+    }
+
+    .prepared-banner-text span {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .prepared-banner-arrow {
+        font-size: 1.75rem;
+        font-weight: bold;
+        opacity: 0.7;
+    }
+
+    .parent-prepared-link {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.85rem 1.25rem;
+        background: white;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        cursor: pointer;
+        margin-bottom: 1.5rem;
+        color: #667eea;
+        font-weight: 600;
+        font-size: 0.95rem;
+        transition: all 0.15s;
+    }
+
+    .parent-prepared-link:hover {
+        border-color: #667eea;
+        background: rgba(102, 126, 234, 0.04);
+    }
+
+    .parent-prepared-link .prepared-banner-arrow {
+        margin-left: auto;
+        color: #cbd5e0;
+    }
+
+    .parent-prepared-link:hover .prepared-banner-arrow {
+        color: #667eea;
     }
 
     @@media (max-width: 480px) {

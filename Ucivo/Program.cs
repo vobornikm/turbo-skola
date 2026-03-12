@@ -23,6 +23,7 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<ITrainingService, TrainingService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
+builder.Services.AddScoped<IPreparedTrainingService, PreparedTrainingService>();
 builder.Services.AddSingleton<IPerformanceMonitor, PerformanceMonitor>();
 builder.Services.AddScoped<ExerciseGenerator>();
 

@@ -5,10 +5,12 @@
 @using TurboSkola.Data.Models
 @using TurboSkola.Utilities
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.JSInterop
 @inject IAuthService AuthService
 @inject IProfileService ProfileService
 @inject UcivoDbContext DbContext
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <PageTitle>Moje Statistiky</PageTitle>
@@ -186,6 +188,34 @@ else
     </div>
 }
 
+@if (showBlockWordDialog && !string.IsNullOrEmpty(blockingWord))
+{
+    <div class="delete-confirm-overlay" @onclick="CancelBlockWord">
+        <div class="delete-confirm-dialog" @onclick:stopPropagation>
+            @if (!blockWordPinVerified)
+            {
+                <h3>Zadej PIN rodičovského profilu</h3>
+                <p>Pro zablokování slova zadej PIN.</p>
+
+                <PinInput Title=""
+                          Hint="Zadej 4-místný PIN"
+                          OnPinEntered="VerifyBlockWordPin"
+                          OnCancel="CancelBlockWord"
+                          ErrorMessage="@blockWordPinError" />
+            }
+            else
+            {
+                <h3>&#x1F6AB; Zablokovat slovo?</h3>
+                <p>Slovo <strong>„@blockingWord"</strong> se už nebude nikdy zobrazovat v trénincích.</p>
+                <div class="dialog-actions">
+                    <button class="btn btn-secondary" @onclick="CancelBlockWord">Zrušit</button>
+                    <button class="btn btn-danger" @onclick="ExecuteBlockWord">Zablokovat</button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
 @code {
     private List<TrainingSession>? trainingSessions;
     private List<UserProfile>? childProfiles;
@@ -203,6 +233,8 @@ else
     private bool pinVerifiedForDelete = false;
     private string? deletePinError;
     private HashSet<string> selectedTrainingTypes = new();
+    private int? highlightSessionId = null;
+    private bool _scrolledToSession = false;
 
     private enum ExerciseSortOrder { Default, ByErrors, ByTime }
 
@@ -232,6 +264,7 @@ else
     {
         "SMALL_MULTIPLICATION" => "\u2716\uFE0F N\u00e1sobilka",
         "ADD_SUB_100"          => "\u2795 S\u010d\u00edt\u00e1n\u00ed / Od\u010d\u00edt\u00e1n\u00ed",
+        "PAIRED_CONSONANTS"    => "\U0001F524 P\u00e1rov\u00e9 souhl\u00e1sky",
         _                      => "\U0001F4DA Tr\u00e9nink"
     };
 
@@ -239,6 +272,7 @@ else
     {
         "SMALL_MULTIPLICATION" => "badge-mul",
         "ADD_SUB_100"          => "badge-addsub",
+        "PAIRED_CONSONANTS"    => "badge-czech",
         _                      => "badge-other"
     };
 
@@ -256,7 +290,39 @@ else
         if (firstRender)
         {
             ProfileService.OnProfileChanged += OnProfileChangedHandler;
+
+            // Parse ?session= query param
+            var uri = Navigation.Uri;
+            var queryIdx = uri.IndexOf('?');
+            if (queryIdx >= 0)
+            {
+                var queryString = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri[(queryIdx)..]);
+                if (queryString.TryGetValue("session", out var sessionVal) && int.TryParse(sessionVal, out var sid))
+                {
+                    highlightSessionId = sid;
+                }
+            }
+
             await LoadDataAsync();
+
+            // Auto-expand the highlighted session after data is loaded
+            if (highlightSessionId.HasValue)
+            {
+                await ToggleSessionDetail(highlightSessionId.Value);
+                StateHasChanged();
+            }
+        }
+
+        // Scroll to highlighted session after it's rendered
+        if (highlightSessionId.HasValue && !_scrolledToSession && expandedSessionId == highlightSessionId)
+        {
+            _scrolledToSession = true;
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("eval",
+                    $"document.getElementById('session-{highlightSessionId.Value}')?.scrollIntoView({{behavior:'smooth',block:'center'}})");
+            }
+            catch { /* ignore */ }
         }
     }
 
@@ -396,7 +462,7 @@ else
                         string accuracyClass = accuracy >= 80 ? "accuracy-high" : accuracy >= 60 ? "accuracy-medium" : "accuracy-low";
                         bool isExpanded = expandedSessionId == session.SessionId;
 
-                        <div class="session-card @(isExpanded ? "expanded" : "")">
+                        <div id="session-@session.SessionId" class="session-card @(isExpanded ? "expanded" : "")">
                             <div class="session-item" @onclick="() => ToggleSessionDetail(session.SessionId)">
                                 <div class="session-left">
                                     <div class="session-date">@session.EndTime.ToString("dd.MM.yyyy HH:mm")</div>
@@ -471,7 +537,7 @@ else
 
                                                 <div class="exercise-item @exerciseClass">
                                                     <span class="exercise-number">#@(exercise.ExerciseIndex + 1)</span>
-                                                    <span class="exercise-text">@exercise.ExerciseText = ?</span>
+                                                    <span class="exercise-text">@FormatExerciseText(exercise)</span>
                                                     <div class="exercise-status">
                                                         @if (exercise.HintShown)
                                                         {
@@ -504,16 +570,22 @@ else
                                                         }
                                                         @if (exercise.IsCorrect && !exercise.SkippedByUser && !exercise.GaveUp)
                                                         {
-                                                            <span class="correct-value">✓ @exercise.CorrectAnswer</span>
+                                                            <span class="correct-value">✓ @FormatCorrectAnswer(exercise, session)</span>
                                                         }
                                                         else if (exercise.SkippedByUser || exercise.GaveUp)
                                                         {
-                                                            <span class="correct-value-reveal">= @exercise.CorrectAnswer</span>
+                                                            <span class="correct-value-reveal">= @FormatCorrectAnswer(exercise, session)</span>
                                                         }
                                                     </div>
                                                     <div class="exercise-meta">
                                                         <span class="exercise-attempts">@exercise.NumberOfAttempts× pokus</span>
                                                         <span class="exercise-time">@exercise.TimeSpentSeconds s</span>
+                                                        @if (ProfileService.IsCurrentProfileParent && session.TrainingTypeCode == "PAIRED_CONSONANTS")
+                                                        {
+                                                            <button class="btn-block-word" @onclick="() => StartBlockWord(exercise.ExerciseText, session.SessionId)" @onclick:stopPropagation title="Zablokovat toto slovo">
+                                                                &#x1F6AB;
+                                                            </button>
+                                                        }
                                                     </div>
                                                 </div>
                                             }
@@ -595,7 +667,7 @@ else
                         @foreach (var item in problematicExercises)
                         {
                             <div class="problematic-item">
-                                <div class="problematic-exercise">@item.Exercise = ?</div>
+                                <div class="problematic-exercise">@FormatProblematicText(item.Exercise)</div>
                                 <div class="problematic-stats">
                                     @if (item.WrongCount > 0)
                                     {
@@ -698,6 +770,134 @@ else
         >= 2 and <= 4 => "příklady",
         _ => "příkladů"
     };
+
+    /// <summary>
+    /// Rozliší zobrazení matematických příkladů ("5 × 7 = ?") od českých cvičení ("chle_").
+    /// </summary>
+    private string FormatExerciseText(SessionExercise exercise)
+    {
+        // Pokud session patří do PAIRED_CONSONANTS, je ExerciseText = "chle_"
+        var session = expandedSessionId.HasValue
+            ? (trainingSessions?.FirstOrDefault(s => s.SessionId == expandedSessionId) ??
+               allChildrenSessions?.FirstOrDefault(s => s.SessionId == expandedSessionId))
+            : null;
+
+        if (session?.TrainingTypeCode == "PAIRED_CONSONANTS")
+            return exercise.ExerciseText; // "chle_" – bez "= ?"
+
+        return exercise.ExerciseText + " = ?";
+    }
+
+    private static string FormatProblematicText(string exerciseText)
+    {
+        // Pokud text obsahuje "_" (blank), je to české cvičení
+        if (exerciseText.Contains('_'))
+            return exerciseText;
+
+        return exerciseText + " = ?";
+    }
+
+    /// <summary>
+    /// Pro matematiku vrátí číslo, pro párové souhlásky vrátí správné písmeno z word banky.
+    /// </summary>
+    private static string FormatCorrectAnswer(SessionExercise exercise, TrainingSession session)
+    {
+        if (session.TrainingTypeCode == "PAIRED_CONSONANTS")
+        {
+            // Zkus najít nejednoznačné slovo
+            var matches = TurboSkola.TrainingGenerators.PairedConsonantsWordBank.AllWords
+                .Where(w => w.WordWithBlank == exercise.ExerciseText)
+                .ToList();
+
+            if (matches.Count > 1)
+            {
+                // Nejednoznačné – obě jsou správně
+                return string.Join(" / ", matches.Select(m => $"{m.CorrectLetter.ToUpper()} ({m.FullWord})"));
+            }
+
+            if (matches.Count == 1)
+                return matches[0].CorrectLetter.ToUpper();
+
+            return exercise.CorrectAnswer == 0 ? "1. varianta" : "2. varianta";
+        }
+
+        return exercise.CorrectAnswer.ToString();
+    }
+
+    // ═══════ ZABLOKOVÁNÍ SLOVA ═══════
+
+    private bool showBlockWordDialog = false;
+    private string? blockingWord = null;
+    private int? blockingExerciseSessionId = null;
+    private bool blockWordPinVerified = false;
+    private string? blockWordPinError = null;
+
+    private void StartBlockWord(string exerciseText, int sessionId)
+    {
+        // Z ExerciseText ("chle_") odvodit celé slovo – najdeme ho v bance
+        var match = TurboSkola.TrainingGenerators.PairedConsonantsWordBank.AllWords
+            .FirstOrDefault(w => w.WordWithBlank == exerciseText);
+
+        blockingWord = match?.FullWord ?? exerciseText;
+        blockingExerciseSessionId = sessionId;
+        blockWordPinVerified = false;
+        blockWordPinError = null;
+        showBlockWordDialog = true;
+    }
+
+    private void CancelBlockWord()
+    {
+        showBlockWordDialog = false;
+        blockingWord = null;
+        blockingExerciseSessionId = null;
+        blockWordPinVerified = false;
+        blockWordPinError = null;
+    }
+
+    private async Task VerifyBlockWordPin(string pin)
+    {
+        if (!ProfileService.IsCurrentProfileParent || !ProfileService.CurrentProfileId.HasValue)
+        {
+            blockWordPinError = "Musíš být přihlášený jako rodič!";
+            StateHasChanged();
+            return;
+        }
+
+        var isValid = await ProfileService.VerifyPinAsync(ProfileService.CurrentProfileId.Value, pin);
+        if (isValid)
+        {
+            blockWordPinVerified = true;
+            blockWordPinError = null;
+        }
+        else
+        {
+            blockWordPinError = "Nesprávný PIN!";
+        }
+        StateHasChanged();
+    }
+
+    private async Task ExecuteBlockWord()
+    {
+        if (string.IsNullOrEmpty(blockingWord)) return;
+
+        var existing = await DbContext.BlockedWords
+            .FirstOrDefaultAsync(b => b.FullWord == blockingWord && b.TrainingTypeCode == "PAIRED_CONSONANTS");
+
+        if (existing == null)
+        {
+            DbContext.BlockedWords.Add(new TurboSkola.Data.Models.BlockedWord
+            {
+                FullWord = blockingWord,
+                TrainingTypeCode = "PAIRED_CONSONANTS",
+                BlockedAt = DateTime.UtcNow,
+                BlockedBy = ProfileService.CurrentProfileName
+            });
+            await DbContext.SaveChangesAsync();
+        }
+
+        CancelBlockWord();
+        StateHasChanged();
+    }
 
     public void Dispose()
     {
@@ -894,6 +1094,7 @@ else
 
     .badge-mul    { background: #ebf4ff; color: #2b6cb0; }
     .badge-addsub { background: #f0fff4; color: #276749; }
+    .badge-czech  { background: #fffbeb; color: #92400e; }
     .badge-other  { background: #f7fafc; color: #4a5568; }
 
     /* ── Filter ── */
@@ -920,6 +1121,7 @@ else
 
     .type-chip.selected.badge-mul    { background: #ebf4ff; border-color: #2b6cb0; color: #2b6cb0; }
     .type-chip.selected.badge-addsub { background: #f0fff4; border-color: #276749; color: #276749; }
+    .type-chip.selected.badge-czech  { background: #fffbeb; border-color: #92400e; color: #92400e; }
 
     .type-chip-clear {
         padding: 0.3rem 0.7rem;
@@ -1080,6 +1282,24 @@ else
         color: #999;
         white-space: nowrap;
         justify-content: flex-end;
+        align-items: center;
+    }
+
+    .btn-block-word {
+        background: none;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 0.1rem 0.35rem;
+        font-size: 0.85rem;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: opacity 0.15s, border-color 0.15s;
+        line-height: 1;
+    }
+
+    .btn-block-word:hover {
+        opacity: 1;
+        border-color: #e53e3e;
     }
 
     .badge {

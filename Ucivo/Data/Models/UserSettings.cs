@@ -10,6 +10,7 @@ public class UserSettings
     public bool IncludeMultiplication { get; set; } = true;
     public bool IncludeDivision { get; set; } = false;
     public string? AddSubSettingsJson { get; set; }
+    public string? PairedConsonantsSettingsJson { get; set; }
     public DateTime LastModified { get; set; }
 
     // Relationships
