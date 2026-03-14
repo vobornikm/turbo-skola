@@ -59,24 +59,38 @@ else
             @if (selectedTab == "overview")
             {
                 <h2 style="margin-top: 2rem;">Celkové statistiky všech dětí</h2>
+
+                <div class="stats-filters">
+                    <div class="time-filter">
+                        @foreach (var period in new int?[] { 1, 7, 30, null })
+                        {
+                            <button class="time-chip @(selectedTimePeriod == period ? "selected" : "")"
+                                    @onclick="() => SetTimePeriod(period)">
+                                @TimePeriodLabel(period)
+                            </button>
+                        }
+                    </div>
+                </div>
+
                 @if (allChildrenSessions != null && allChildrenSessions.Any())
                 {
-                    var totalEx = allChildrenSessions.Sum(s => s.TotalExamples);
-                    var correctEx = allChildrenSessions.Sum(s => s.CorrectFirstAttempt);
+                    var timeFiltered = ApplyTimeFilter(allChildrenSessions);
+                    var totalEx = timeFiltered.Sum(s => s.TotalExamples);
+                    var correctEx = timeFiltered.Sum(s => s.CorrectFirstAttempt);
                     var successPct = totalEx > 0 ? (double)correctEx / totalEx * 100 : 0;
 
                     <div class="stats-grid">
                         <div class="stat-card">
                             <h3>Celkem tréninků</h3>
-                            <p class="stat-value">@allChildrenSessions.Count</p>
+                            <p class="stat-value">@timeFiltered.Count</p>
                         </div>
                         <div class="stat-card">
                             <h3>Celkový čas</h3>
-                            <p class="stat-value">@TimeSpan.FromSeconds(allChildrenSessions.Sum(s => s.DurationSeconds)).ToString(@"hh\:mm\:ss")</p>
+                            <p class="stat-value">@TimeSpan.FromSeconds(timeFiltered.Sum(s => s.DurationSeconds)).ToString(@"hh\:mm\:ss")</p>
                         </div>
                         <div class="stat-card">
                             <h3>Celkem příkladů</h3>
-                            <p class="stat-value">@allChildrenSessions.Sum(s => s.TotalExamples)</p>
+                            <p class="stat-value">@timeFiltered.Sum(s => s.TotalExamples)</p>
                         </div>
                         <div class="stat-card">
                             <h3>Úspěšnost</h3>
@@ -88,7 +102,7 @@ else
                     <div class="children-stats">
                         @foreach (var child in childProfiles)
                         {
-                            var childSessions = allChildrenSessions.Where(s => s.ProfileId == child.ProfileId).ToList();
+                            var childSessions = timeFiltered.Where(s => s.ProfileId == child.ProfileId).ToList();
                             if (childSessions.Any())
                             {
                                 var cTotal = childSessions.Sum(s => s.TotalExamples);
@@ -117,7 +131,9 @@ else
             {
                 var selectedProfileId = int.Parse(selectedTab);
                 var selectedChild = childProfiles.FirstOrDefault(p => p.ProfileId == selectedProfileId);
-                var selectedSessions = allChildrenSessions?.Where(s => s.ProfileId == selectedProfileId).OrderByDescending(s => s.EndTime).ToList();
+                var selectedSessions = allChildrenSessions != null
+                    ? ApplyTimeFilter(allChildrenSessions.Where(s => s.ProfileId == selectedProfileId).ToList()).OrderByDescending(s => s.EndTime).ToList()
+                    : null;
 
                 if (selectedChild != null)
                 {
@@ -149,7 +165,7 @@ else
             }
             else
             {
-                @RenderStats(trainingSessions)
+                @RenderStats(ApplyTimeFilter(trainingSessions))
             }
         }
 
@@ -233,6 +249,7 @@ else
     private bool pinVerifiedForDelete = false;
     private string? deletePinError;
     private HashSet<string> selectedTrainingTypes = new();
+    private int? selectedTimePeriod = 7;
     private int? highlightSessionId = null;
     private bool _scrolledToSession = false;
 
@@ -251,12 +268,37 @@ else
     {
         selectedTab = tab;
         selectedTrainingTypes.Clear();
+        selectedTimePeriod = 7;
     }
 
-    private List<TrainingSession> FilteredSessions(List<TrainingSession> sessions) =>
-        selectedTrainingTypes.Count == 0
-            ? sessions
-            : sessions.Where(s => selectedTrainingTypes.Contains(s.TrainingTypeCode ?? "")).ToList();
+    private List<TrainingSession> ApplyTimeFilter(List<TrainingSession> sessions)
+    {
+        if (selectedTimePeriod == null) return sessions;
+        var cutoff = DateTime.UtcNow.AddDays(-selectedTimePeriod.Value);
+        return sessions.Where(s => s.EndTime >= cutoff).ToList();
+    }
+
+    private List<TrainingSession> FilteredSessions(List<TrainingSession> sessions)
+    {
+        var result = ApplyTimeFilter(sessions);
+        if (selectedTrainingTypes.Count > 0)
+            result = result.Where(s => selectedTrainingTypes.Contains(s.TrainingTypeCode ?? "")).ToList();
+        return result;
+    }
+
+    private void SetTimePeriod(int? days)
+    {
+        selectedTimePeriod = days;
+    }
+
+    private static string TimePeriodLabel(int? days) => days switch
+    {
+        1 => "Dnes",
+        7 => "7 dn\u00ed",
+        30 => "30 dn\u00ed",
+        null => "V\u0161e",
+        _ => $"{days} dn\u00ed"
+    };
 
     private static string NormalizeTypeCode(string? code) => code ?? "";
 
@@ -400,40 +442,25 @@ else
 
     private RenderFragment RenderStats(List<TrainingSession> sessions)
     {
-        int total = sessions.Sum(s => s.TotalExamples);
-        int correct = sessions.Sum(s => s.CorrectFirstAttempt);
-        double percentage = total > 0 ? (double)correct / total * 100 : 0;
-
         return @<text>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>Počet tréninků</h3>
-                    <p class="stat-value">@sessions.Count</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Celkový čas</h3>
-                    <p class="stat-value">@TimeSpan.FromSeconds(sessions.Sum(s => s.DurationSeconds)).ToString(@"hh\:mm\:ss")</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Příkladů celkem</h3>
-                    <p class="stat-value">@sessions.Sum(s => s.TotalExamples)</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Správně napoprvé</h3>
-                    <p class="stat-value">@correct / @total</p>
-                    <p class="stat-percentage">(@percentage.ToString("F1")%)</p>
-                </div>
-            </div>
+            @{
+                var availableTypes = GetAvailableTypes(sessions).ToList();
+                var displaySessions = FilteredSessions(sessions);
+                int total = displaySessions.Sum(s => s.TotalExamples);
+                int correct = displaySessions.Sum(s => s.CorrectFirstAttempt);
+                double percentage = total > 0 ? (double)correct / total * 100 : 0;
+            }
 
-        @RenderProblematicExercises(sessions)
-
-            <div class="recent-sessions">
-                <h2>Poslední tréninky</h2>
-
-                @{
-                    var availableTypes = GetAvailableTypes(sessions).ToList();
-                    var displaySessions = FilteredSessions(sessions);
-                }
+            <div class="stats-filters">
+                <div class="time-filter">
+                    @foreach (var period in new int?[] { 1, 7, 30, null })
+                    {
+                        <button class="time-chip @(selectedTimePeriod == period ? "selected" : "")"
+                                @onclick="() => SetTimePeriod(period)">
+                            @TimePeriodLabel(period)
+                        </button>
+                    }
+                </div>
 
                 @if (availableTypes.Count > 1)
                 {
@@ -454,6 +481,32 @@ else
                         }
                     </div>
                 }
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Počet tréninků</h3>
+                    <p class="stat-value">@displaySessions.Count</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Celkový čas</h3>
+                    <p class="stat-value">@TimeSpan.FromSeconds(displaySessions.Sum(s => s.DurationSeconds)).ToString(@"hh\:mm\:ss")</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Příkladů celkem</h3>
+                    <p class="stat-value">@displaySessions.Sum(s => s.TotalExamples)</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Správně napoprvé</h3>
+                    <p class="stat-value">@correct / @total</p>
+                    <p class="stat-percentage">(@percentage.ToString("F1")%)</p>
+                </div>
+            </div>
+
+        @RenderProblematicExercises(displaySessions)
+
+            <div class="recent-sessions">
+                <h2>Poslední tréninky</h2>
 
                 <div class="sessions-list">
                     @foreach (var session in displaySessions.Take(50))
@@ -1097,12 +1150,50 @@ else
     .badge-czech  { background: #fffbeb; color: #92400e; }
     .badge-other  { background: #f7fafc; color: #4a5568; }
 
-    /* ── Filter ── */
+    /* ── Filters wrapper ── */
+    .stats-filters {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
+    }
+
+    /* ── Time filter ── */
+    .time-filter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        align-items: center;
+    }
+
+    .time-chip {
+        padding: 0.3rem 0.85rem;
+        border-radius: 20px;
+        border: 1.5px solid #e2e8f0;
+        background: white;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.15s;
+        color: #4a5568;
+    }
+
+    .time-chip:hover {
+        border-color: #667eea;
+        color: #667eea;
+    }
+
+    .time-chip.selected {
+        background: #ebf4ff;
+        border-color: #667eea;
+        color: #667eea;
+        font-weight: 600;
+    }
+
+    /* ── Type filter ── */
     .type-filter {
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
-        margin-bottom: 1rem;
         align-items: center;
     }
 
