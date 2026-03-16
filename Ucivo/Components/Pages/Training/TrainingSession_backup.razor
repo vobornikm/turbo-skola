@@ -10,6 +10,7 @@
 @inject ISessionService SessionService
 @inject IAuthService AuthService
 @inject IProfileService ProfileService
+@inject IPreparedTrainingService PreparedTrainingService
 @inject NavigationManager Navigation
 
 <PageTitle>Trénink - Malá Násobilka</PageTitle>
@@ -493,6 +494,8 @@ private TrainingSettings? currentSettings = null;
             else
             {
                 await TrainingService.CompleteSessionAsync(sessionId, correctFirstAttempt, exercises.Sum(e => e.Attempts), exercisesToSave);
+                if (SessionService.ActivePreparedTrainingId.HasValue)
+                    await PreparedTrainingService.MarkAsCompletedAsync(SessionService.ActivePreparedTrainingId.Value);
             }
         }
         catch (Exception ex)
