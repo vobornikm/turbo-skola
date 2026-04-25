@@ -12,6 +12,7 @@
 @inject IProfileService ProfileService
 @inject IPreparedTrainingService PreparedTrainingService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Trénink - Malá Násobilka</PageTitle>
 
@@ -96,6 +97,13 @@
                     @exercises[currentExerciseIndex].Exercise.DisplayText
                 </div>
             </div>
+
+            @if (enableReadAloud)
+            {
+                <button class="btn-speak" @onclick="SpeakCurrentExercise" title="Pøeèíst nahlas">
+                    &#x1F50A;
+                </button>
+            }
 
             @if (!exercises[currentExerciseIndex].IsCorrect)
             {
@@ -255,6 +263,7 @@ private bool showSkipConfirm = false;
 private bool showHintDialog = false;
 private bool showGiveUpDialog = false;
 private TrainingSettings? currentSettings = null;
+private bool enableReadAloud = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -267,8 +276,9 @@ private TrainingSettings? currentSettings = null;
             settings = await SettingsService.GetProfileSettingsAsync(null);
         }
 
-        currentSettings = settings; // Uložit pro pozdìjší použití
+        currentSettings = settings;
         durationType = settings.DurationType;
+        enableReadAloud = settings.EnableReadAloud;
         
         if (settings.DurationType == "Time")
         {
@@ -296,6 +306,7 @@ private TrainingSettings? currentSettings = null;
     }
 
     private int _lastFocusedExerciseIndex = -1;
+    private int _lastSpokenExerciseIndex = -1;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -303,14 +314,18 @@ private TrainingSettings? currentSettings = null;
         if (answerInput.Id == null) return;
         if (currentExerciseIndex >= exercises.Count) return;
 
-        // Focus pouze pøi pøechodu na nový pøíklad
-        // Ne pøi každém re-renderu (psani, špatná odpovìï...) - to zpùsobovalo blikání klavesnice
         if (currentExerciseIndex != _lastFocusedExerciseIndex)
         {
             _lastFocusedExerciseIndex = currentExerciseIndex;
-            // Malá prodleva – iOS potøebuje èas na vykreslení pøed fokusem
             if (!firstRender) await Task.Delay(50);
             await answerInput.FocusAsync();
+
+            // Auto-read nový pøíklad
+            if (enableReadAloud && currentExerciseIndex != _lastSpokenExerciseIndex)
+            {
+                _lastSpokenExerciseIndex = currentExerciseIndex;
+                await SpeakExerciseAsync(exercises[currentExerciseIndex].Exercise.DisplayText);
+            }
         }
     }
 
@@ -737,6 +752,29 @@ private TrainingSettings? currentSettings = null;
         >= 2 and <= 4 => "pøíklady",
         _ => "pøíkladù"
     };
+
+    // ============================================================
+    // TEXT-TO-SPEECH
+    // ============================================================
+
+    private async Task SpeakCurrentExercise()
+    {
+        if (currentExerciseIndex >= exercises.Count) return;
+        await SpeakExerciseAsync(exercises[currentExerciseIndex].Exercise.DisplayText);
+    }
+
+    private async Task SpeakExerciseAsync(string displayText)
+    {
+        try
+        {
+            var spokenText = MathSpeechHelper.ToSpokenCzech(displayText);
+            await JSRuntime.InvokeVoidAsync("speechHelper.speak", spokenText, "cs-CZ");
+        }
+        catch
+        {
+            // Speech API nemusí být dostupné – ignorujeme
+        }
+    }
 }
 
 <style>
@@ -826,10 +864,33 @@ private TrainingSettings? currentSettings = null;
         align-items: center;
         justify-content: center;
         width: 100%;
-        /* min-height drží výšku i pøi pøechodu na nový pøíklad
-           – zabrání CLS seskoku tlaèítek. Hodnota odpovídá 1 øádku textu pøíkladu
-           (font-size clamp(2.5rem,12vw,5rem) × line-height 1.2) */
         min-height: clamp(3.2rem, 15vw, 6.5rem);
+    }
+
+    .btn-speak {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        width: 2.4rem;
+        height: 2.4rem;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.15s;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.3rem;
+    }
+
+    .btn-speak:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: scale(1.1);
+    }
+
+    .btn-speak:active {
+        transform: scale(0.95);
     }
 
     .exercise-text {

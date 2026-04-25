@@ -210,7 +210,7 @@
                         <div class="toggle-label">
                             <span class="toggle-icon">➕➖</span>
                             <div>
-                                <div>Více čísel ve výpočtu (3–6)</div>
+                                <div>Více čísel ve výpočtu</div>
                                 <div class="toggle-hint">např. 15 + 27 - 11 = , 21 - 6 + 35 - 4 =</div>
                             </div>
                         </div>
@@ -218,9 +218,67 @@
                             <div class="toggle-knob"></div>
                         </div>
                     </div>
+
+                    @if (settings.IncludeMultipleNumbers)
+                    {
+                        <div class="chip-selector">
+                            <span class="chip-label">Počet čísel ve výpočtu:</span>
+                            <div class="chip-row">
+                                @foreach (var n in new[] { 3, 4, 5, 6, 7, 8 })
+                                {
+                                    var isSelected = settings.MultipleNumbersCounts.Contains(n);
+                                    <button class="chip @(isSelected ? "chip-active" : "")"
+                                            @onclick="() => ToggleNumberCount(n)">
+                                        @n
+                                    </button>
+                                }
+                            </div>
+                            @if (settings.MultipleNumbersCounts.Count == 0)
+                            {
+                                <div class="validation-warning" style="margin-top: 0.5rem">
+                                    <span>⚠️</span> Vyber alespoň jeden počet
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (settings.IncludeParentheses || settings.IncludeMultipleNumbers)
+                    {
+                        <div class="toggle-item" @onclick="() => { settings.EnableScratchWork = !settings.EnableScratchWork; StateHasChanged(); }">
+                            <div class="toggle-label">
+                                <span class="toggle-icon">📝</span>
+                                <div>
+                                    <div>Povolit mezivýpočty</div>
+                                    <div class="toggle-hint">Malé políčko nad závorkou / krokem pro poznámku mezivýsledku</div>
+                                </div>
+                            </div>
+                            <div class="toggle-switch @(settings.EnableScratchWork ? "on" : "off")">
+                                <div class="toggle-knob"></div>
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
         }
+
+        <!-- PŘÍSTUPNOST -->
+        <div class="form-section op-section accessibility-section">
+            <h3>🔊 Přístupnost</h3>
+            <div class="toggles-container">
+                <div class="toggle-item" @onclick="() => { settings.EnableReadAloud = !settings.EnableReadAloud; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">🗣️</span>
+                        <div>
+                            <div>Číst příklady nahlas</div>
+                            <div class="toggle-hint">Každý nový příklad se automaticky přečte</div>
+                        </div>
+                    </div>
+                    <div class="toggle-switch @(settings.EnableReadAloud ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- TLAČÍTKO START -->
         <div class="start-section">
@@ -286,7 +344,9 @@
     }
 
     private bool IsValid() =>
-        (settings.IncludeAddition || settings.IncludeSubtraction) && settings.DurationValue > 0;
+        (settings.IncludeAddition || settings.IncludeSubtraction)
+        && settings.DurationValue > 0
+        && (!settings.IncludeMultipleNumbers || settings.MultipleNumbersCounts.Count > 0);
 
     private async Task StartTraining()
     {
@@ -318,6 +378,15 @@
         >= 2 and <= 4 => "příklady",
         _ => "příkladů"
     };
+
+    private void ToggleNumberCount(int n)
+    {
+        if (settings.MultipleNumbersCounts.Contains(n))
+            settings.MultipleNumbersCounts.Remove(n);
+        else
+            settings.MultipleNumbersCounts.Add(n);
+        StateHasChanged();
+    }
 
     private string GetSettingsJson() => JsonSerializer.Serialize(settings);
 }
@@ -392,6 +461,10 @@
 
     .combined-section {
         border-left: 4px solid #667eea;
+    }
+
+    .accessibility-section {
+        border-left: 4px solid #38b2ac;
     }
 
     /* SEGMENTED CONTROL */
@@ -576,6 +649,53 @@
         border-radius: 4px;
         color: #856404;
         font-size: 0.9rem;
+    }
+
+    /* CHIP SELECTOR – výběr počtu čísel */
+    .chip-selector {
+        margin-top: 0.5rem;
+        padding: 0.75rem 1rem;
+        background: #f0f4ff;
+        border-radius: 10px;
+    }
+
+    .chip-label {
+        display: block;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #555;
+        margin-bottom: 0.5rem;
+    }
+
+    .chip-row {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .chip {
+        min-width: 2.5rem;
+        padding: 0.45rem 0.75rem;
+        border: 2px solid #d0d5e0;
+        border-radius: 20px;
+        background: white;
+        color: #555;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+    .chip:hover {
+        border-color: #667eea;
+        color: #667eea;
+    }
+
+    .chip.chip-active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: transparent;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
     }
 
     /* START BUTTON */

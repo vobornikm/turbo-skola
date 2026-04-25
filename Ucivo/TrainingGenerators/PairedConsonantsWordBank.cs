@@ -58,7 +58,7 @@ public static class PairedConsonantsWordBank
             endFirst: [
                 "dav", "zpěv", "krev", "stav", "mrav", "ostrov", "hřbitov",
                 "motiv", "detektiv", "přeliv", "odliv", "záliv",
-                "Václav", "výlov", "úlov",
+                "Václav", "výlov", "úlov", "lev",
                 "kov", "hněv", "úsměv", "splav", "nápěv", "průliv"
             ],
             endSecond: [

@@ -1,0 +1,365 @@
+@page "/training/mixedmath/setup"
+@rendermode InteractiveServer
+@using TurboSkola.Services
+@using System.Text.Json
+@inject ISessionService SessionService
+@inject ISettingsService SettingsService
+@inject IAuthService AuthService
+@inject IProfileService ProfileService
+@inject NavigationManager Navigation
+
+<PageTitle>Nastavení tréninku - Smíšené počítání do 100</PageTitle>
+
+<LoadingSpinner IsLoading="@isStarting" Message="Připravuji trénink..." />
+
+<div class="training-setup-container">
+    <div class="setup-header">
+        <a href="/training" class="back-link">← Zpět na výběr</a>
+        <h1>🧮 Smíšené počítání do 100</h1>
+        <p class="subtitle">Nastav si svůj trénink</p>
+    </div>
+
+    <div class="setup-form">
+
+        <!-- DOBA TRVÁNÍ -->
+        <div class="form-section">
+            <h3>⏱️ Doba trvání</h3>
+            <div class="segmented-control">
+                <button class="segment @(settings.DurationType == "Time" ? "active" : "")" @onclick="SwitchToTime">
+                    <span class="icon">⏰</span>
+                    <span>Čas</span>
+                </button>
+                <button class="segment @(settings.DurationType == "Count" ? "active" : "")" @onclick="SwitchToCount">
+                    <span class="icon">📊</span>
+                    <span>Počet</span>
+                </button>
+            </div>
+
+            @if (settings.DurationType == "Time")
+            {
+                <div class="slider-container">
+                    <div class="slider-header">
+                        <span class="slider-label">Počet minut</span>
+                        <span class="slider-value">@settings.DurationValue min</span>
+                    </div>
+                    <input type="range" class="modern-slider" min="1" max="30" step="1"
+                           @bind="settings.DurationValue" @bind:event="oninput" />
+                    <div class="slider-markers">
+                        <span>1</span><span>10</span><span>20</span><span>30</span>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="slider-container">
+                    <div class="slider-header">
+                        <span class="slider-label">Počet příkladů</span>
+                        <span class="slider-value">@settings.DurationValue @PrikladText(settings.DurationValue)</span>
+                    </div>
+                    <input type="range" class="modern-slider" min="5" max="100" step="5"
+                           @bind="settings.DurationValue" @bind:event="oninput" />
+                    <div class="slider-markers">
+                        <span>5</span><span>25</span><span>50</span><span>75</span><span>100</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- OPERACE -->
+        <div class="form-section">
+            <h3>🔢 Operace</h3>
+            <div class="toggles-container">
+                <div class="toggle-item" @onclick="() => { settings.IncludeAddition = !settings.IncludeAddition; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">➕</span>
+                        <span>Sčítání</span>
+                    </div>
+                    <div class="toggle-switch @(settings.IncludeAddition ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+                <div class="toggle-item" @onclick="() => { settings.IncludeSubtraction = !settings.IncludeSubtraction; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">➖</span>
+                        <span>Odčítání</span>
+                    </div>
+                    <div class="toggle-switch @(settings.IncludeSubtraction ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+                <div class="toggle-item" @onclick="() => { settings.IncludeMultiplication = !settings.IncludeMultiplication; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">✖️</span>
+                        <span>Násobení</span>
+                    </div>
+                    <div class="toggle-switch @(settings.IncludeMultiplication ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+                <div class="toggle-item" @onclick="() => { settings.IncludeDivision = !settings.IncludeDivision; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">➗</span>
+                        <span>Dělení</span>
+                    </div>
+                    <div class="toggle-switch @(settings.IncludeDivision ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+            </div>
+            @if (!settings.IncludeAddition && !settings.IncludeSubtraction && !settings.IncludeMultiplication && !settings.IncludeDivision)
+            {
+                <div class="validation-warning">
+                    <span>⚠️</span> Musí být vybrána alespoň jedna operace
+                </div>
+            }
+        </div>
+
+        <!-- POKROČILÁ NASTAVENÍ -->
+        <div class="form-section op-section advanced-section">
+            <h3>⚙️ Pokročilá nastavení</h3>
+            <div class="toggles-container">
+                <div class="toggle-item" @onclick="() => { settings.IncludeTricks = !settings.IncludeTricks; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">🎲</span>
+                        <div>
+                            <div>Zahrnout lumpárny</div>
+                            <div class="toggle-hint">např. _ × 5 + 3 = 28</div>
+                        </div>
+                    </div>
+                    <div class="toggle-switch @(settings.IncludeTricks ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+                <div class="toggle-item" @onclick="() => { settings.IncludeParentheses = !settings.IncludeParentheses; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">🔢</span>
+                        <div>
+                            <div>Zahrnout závorky</div>
+                            <div class="toggle-hint">např. 3 × (12 + 5) = , (20 - 4) ÷ 2 =</div>
+                        </div>
+                    </div>
+                    <div class="toggle-switch @(settings.IncludeParentheses ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+
+                <div class="chip-selector">
+                    <span class="chip-label">Počet čísel ve výpočtu:</span>
+                    <div class="chip-row">
+                        @foreach (var n in new[] { 2, 3, 4, 5, 6, 7, 8 })
+                        {
+                            var isSelected = settings.NumberCounts.Contains(n);
+                            <button class="chip @(isSelected ? "chip-active" : "")"
+                                    @onclick="() => ToggleNumberCount(n)">
+                                @n
+                            </button>
+                        }
+                    </div>
+                    @if (settings.NumberCounts.Count == 0)
+                    {
+                        <div class="validation-warning" style="margin-top: 0.5rem">
+                            <span>⚠️</span> Vyber alespoň jeden počet
+                        </div>
+                    }
+                </div>
+
+                <div class="toggle-item" @onclick="() => { settings.EnableScratchWork = !settings.EnableScratchWork; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">📝</span>
+                        <div>
+                            <div>Povolit mezivýpočty</div>
+                            <div class="toggle-hint">Malé políčko nad krokem pro poznámku mezivýsledku</div>
+                        </div>
+                    </div>
+                    <div class="toggle-switch @(settings.EnableScratchWork ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PŘÍSTUPNOST -->
+        <div class="form-section op-section accessibility-section">
+            <h3>🔊 Přístupnost</h3>
+            <div class="toggles-container">
+                <div class="toggle-item" @onclick="() => { settings.EnableReadAloud = !settings.EnableReadAloud; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">🗣️</span>
+                        <div>
+                            <div>Číst příklady nahlas</div>
+                            <div class="toggle-hint">Každý nový příklad se automaticky přečte</div>
+                        </div>
+                    </div>
+                    <div class="toggle-switch @(settings.EnableReadAloud ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TLAČÍTKO START -->
+        <div class="start-section">
+            <button class="btn-start-modern @(IsValid() ? "" : "disabled")"
+                    @onclick="StartTraining"
+                    disabled="@(!IsValid())">
+                <span class="btn-icon">🚀</span>
+                <span class="btn-text">Spustit trénink</span>
+            </button>
+        </div>
+
+        <!-- PŘIPRAVIT PRO DÍTĚ -->
+        <PrepareForChildPanel TrainingTypeCode="MIXED_MATH_100"
+                              SettingsJson="@GetSettingsJson()"
+                              IsValid="@IsValid()" />
+    </div>
+</div>
+
+@code {
+    private MixedMathTrainingSettings settings = new();
+    private bool isStarting = false;
+    private bool isInitialized = false;
+    private int timeValue = 5;
+    private int countValue = 20;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await Task.Delay(150);
+            var profileId = ProfileService?.CurrentProfileId;
+            settings = await SettingsService.GetMixedMathSettingsAsync(profileId);
+
+            if (settings.DurationType == "Time")
+                timeValue = settings.DurationValue;
+            else
+                countValue = settings.DurationValue;
+
+            isInitialized = true;
+            StateHasChanged();
+        }
+        catch
+        {
+            isInitialized = true;
+        }
+    }
+
+    private void SwitchToTime()
+    {
+        countValue = settings.DurationValue;
+        settings.DurationType = "Time";
+        settings.DurationValue = timeValue;
+        StateHasChanged();
+    }
+
+    private void SwitchToCount()
+    {
+        timeValue = settings.DurationValue;
+        settings.DurationType = "Count";
+        settings.DurationValue = countValue;
+        StateHasChanged();
+    }
+
+    private bool IsValid() =>
+        (settings.IncludeAddition || settings.IncludeSubtraction || settings.IncludeMultiplication || settings.IncludeDivision)
+        && settings.DurationValue > 0
+        && settings.NumberCounts.Count > 0;
+
+    private async Task StartTraining()
+    {
+        if (!IsValid()) return;
+        try
+        {
+            isStarting = true;
+            StateHasChanged();
+            await Task.Delay(100);
+
+            SessionService.SetCurrentMixedMathSettings(settings);
+
+            if (AuthService?.IsAuthenticated == true && ProfileService.CurrentProfileId.HasValue)
+            {
+                await SettingsService.SaveMixedMathSettingsAsync(ProfileService.CurrentProfileId.Value, settings);
+            }
+
+            Navigation.NavigateTo("/training/mixedmath/session");
+        }
+        finally
+        {
+            isStarting = false;
+        }
+    }
+
+    private static string PrikladText(int n) => n switch
+    {
+        1 => "příklad",
+        >= 2 and <= 4 => "příklady",
+        _ => "příkladů"
+    };
+
+    private void ToggleNumberCount(int n)
+    {
+        if (settings.NumberCounts.Contains(n))
+            settings.NumberCounts.Remove(n);
+        else
+            settings.NumberCounts.Add(n);
+        StateHasChanged();
+    }
+
+    private string GetSettingsJson() => JsonSerializer.Serialize(settings);
+}
+
+<style>
+    .training-setup-container { max-width: 600px; margin: 0 auto; padding: 1rem; min-height: 100vh; }
+    .setup-header { text-align: center; margin-bottom: 2rem; }
+    .back-link { display: inline-block; color: #667eea; text-decoration: none; font-size: 0.95rem; margin-bottom: 0.75rem; }
+    .back-link:hover { text-decoration: underline; }
+    .setup-header h1 { margin: 0 0 0.5rem 0; font-size: 2rem; color: #333; }
+    .subtitle { color: #666; font-size: 1.1rem; margin: 0; }
+    .setup-form { background: white; border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+    .form-section { padding: 2rem; border-bottom: 1px solid #f0f0f0; }
+    .form-section:last-child { border-bottom: none; }
+    .form-section h3 { margin: 0 0 1.5rem 0; font-size: 1.2rem; color: #333; font-weight: 600; }
+    .advanced-section { border-left: 4px solid #ed8936; }
+    .accessibility-section { border-left: 4px solid #38b2ac; }
+    .segmented-control { display: grid; grid-template-columns: 1fr 1fr; background: #f5f5f5; border-radius: 12px; padding: 4px; margin-bottom: 1.5rem; }
+    .segment { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 1rem; border: none; background: transparent; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 0.95rem; font-weight: 500; color: #666; }
+    .segment .icon { font-size: 1.5rem; }
+    .segment.active { background: white; color: #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .slider-container { margin-top: 1rem; }
+    .slider-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .slider-label { font-weight: 500; color: #666; }
+    .slider-value { font-size: 1.5rem; font-weight: 700; color: #667eea; }
+    .modern-slider { width: 100%; height: 8px; border-radius: 4px; background: linear-gradient(to right, #667eea 0%, #764ba2 100%); outline: none; -webkit-appearance: none; margin: 1rem 0; }
+    .modern-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: white; cursor: pointer; box-shadow: 0 2px 8px rgba(102,126,234,0.4); border: 3px solid #667eea; transition: transform 0.2s; }
+    .modern-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+    .modern-slider::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: white; cursor: pointer; box-shadow: 0 2px 8px rgba(102,126,234,0.4); border: 3px solid #667eea; }
+    .slider-markers { display: flex; justify-content: space-between; font-size: 0.85rem; color: #999; padding: 0 4px; }
+    .toggles-container { display: flex; flex-direction: column; gap: 0.75rem; }
+    .toggle-item { display: flex; justify-content: space-between; align-items: center; padding: 0.9rem 1rem; background: #f8f9fa; border-radius: 12px; cursor: pointer; transition: background 0.2s; }
+    .toggle-item:hover { background: #f0f0f0; }
+    .toggle-label { display: flex; align-items: center; gap: 0.75rem; font-weight: 500; font-size: 1rem; }
+    .toggle-icon { font-size: 1.4rem; }
+    .toggle-hint { font-size: 0.78rem; color: #999; font-weight: 400; margin-top: 0.1rem; }
+    .toggle-switch { width: 56px; height: 30px; background: #ccc; border-radius: 15px; position: relative; transition: background 0.3s; flex-shrink: 0; }
+    .toggle-switch.on { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .toggle-knob { width: 24px; height: 24px; background: white; border-radius: 50%; position: absolute; top: 3px; left: 3px; transition: transform 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .toggle-switch.on .toggle-knob { transform: translateX(26px); }
+    .validation-warning { margin-top: 1rem; padding: 0.75rem; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; color: #856404; font-size: 0.9rem; }
+    .chip-selector { margin-top: 0.5rem; padding: 0.75rem 1rem; background: #f0f4ff; border-radius: 10px; }
+    .chip-label { display: block; font-size: 0.82rem; font-weight: 600; color: #555; margin-bottom: 0.5rem; }
+    .chip-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .chip { min-width: 2.5rem; padding: 0.45rem 0.75rem; border: 2px solid #d0d5e0; border-radius: 20px; background: white; color: #555; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+    .chip:hover { border-color: #667eea; color: #667eea; }
+    .chip.chip-active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-color: transparent; box-shadow: 0 2px 8px rgba(102,126,234,0.3); }
+    .start-section { padding: 2rem; }
+    .btn-start-modern { width: 100%; padding: 1.5rem; border: none; border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-size: 1.2rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 1rem; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
+    .btn-start-modern:hover:not(.disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.5); }
+    .btn-start-modern.disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-icon { font-size: 1.5rem; }
+    .btn-text { font-size: 1.2rem; }
+
+    @@media (max-width: 480px) {
+        .training-setup-container { padding: 0.5rem; }
+        .form-section { padding: 1.25rem; }
+        .setup-header h1 { font-size: 1.5rem; }
+    }
+</style>

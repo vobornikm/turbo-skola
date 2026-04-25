@@ -81,6 +81,48 @@ window.trainingLayout = {
     }
 };
 
+// ============================================================
+// Speech (Text-to-Speech) – čtení příkladů nahlas
+// ============================================================
+window.speechHelper = {
+    _preferredVoice: null,
+
+    speak: function (text, lang) {
+        if (!('speechSynthesis' in window)) return;
+        speechSynthesis.cancel();
+
+        var utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = lang || 'cs-CZ';
+        utterance.rate = 0.85;
+        utterance.pitch = 1.05;
+
+        // Zkusit najít český hlas (cachovaný)
+        if (!this._preferredVoice) {
+            var voices = speechSynthesis.getVoices();
+            this._preferredVoice = voices.find(function (v) { return v.lang && v.lang.startsWith('cs'); }) || null;
+        }
+        if (this._preferredVoice) utterance.voice = this._preferredVoice;
+
+        speechSynthesis.speak(utterance);
+    },
+
+    stop: function () {
+        if ('speechSynthesis' in window) speechSynthesis.cancel();
+    },
+
+    isSupported: function () {
+        return 'speechSynthesis' in window;
+    }
+};
+
+// Předem načíst hlasy (Chrome je načítá async)
+if ('speechSynthesis' in window) {
+    speechSynthesis.onvoiceschanged = function () {
+        var voices = speechSynthesis.getVoices();
+        window.speechHelper._preferredVoice = voices.find(function (v) { return v.lang && v.lang.startsWith('cs'); }) || null;
+    };
+}
+
 // Dropdown toggle s debouncing - p�ipojit event listener
 let dropdownToggling = false;
 let dotNetHelperInstance = null;

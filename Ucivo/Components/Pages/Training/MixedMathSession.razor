@@ -1,0 +1,635 @@
+@page "/training/mixedmath/session"
+@layout TrainingLayout
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@using TurboSkola.Services
+@using TurboSkola.Utilities
+@using TurboSkola.TrainingGenerators
+@using TurboSkola.Components.Layout
+@using System.Diagnostics
+@inject ITrainingService TrainingService
+@inject ISessionService SessionService
+@inject IAuthService AuthService
+@inject IProfileService ProfileService
+@inject IPreparedTrainingService PreparedTrainingService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Trénink - Smíšené počítání</PageTitle>
+
+<LoadingSpinner IsLoading="@isSaving" Message="Ukládám výsledky..." />
+
+<div class="training-session-container">
+    @if (!isSessionStarted)
+    {
+        <div class="loading"><p>Příprava tréninku...</p></div>
+    }
+    else if (isSessionCompleted)
+    {
+        <div class="results-container">
+            <h1>&#x2605; Výborně! &#x2605;</h1>
+            <div class="results-summary">
+                <div class="result-item">
+                    <span class="result-label">Doba trvání:</span>
+                    <span class="result-value">@TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss")</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Počet příkladů:</span>
+                    <span class="result-value">@totalExercisesSeen</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Správné napoprvé:</span>
+                    <span class="result-value">@correctFirstAttempt / @totalExercisesSeen</span>
+                </div>
+                <div class="result-item">
+                    <span class="result-label">Úspěšnost:</span>
+                    <span class="result-value">@(totalExercisesSeen > 0 ? Math.Round((double)correctFirstAttempt / totalExercisesSeen * 100) : 0)%</span>
+                </div>
+            </div>
+            <div class="results-actions">
+                <button class="btn-result-primary" @onclick="NextTraining" disabled="@isSaving">
+                    @if (isSaving) { <span>&#x27F3; Ukládám...</span> }
+                    else { <span>&#x1F680; Další trénink</span> }
+                </button>
+                <div class="results-ghost-row">
+                    <button class="btn-result-ghost" @onclick="GoToStats" disabled="@isSaving">&#x1F4CA; Zobrazit odpovědi</button>
+                    <button class="btn-result-ghost" @onclick="GoToTrainingHub" disabled="@isSaving">&#x1F500; Jiný trénink</button>
+                </div>
+                <button class="btn-result-ghost full-width" @onclick="GoHome" disabled="@isSaving">&#x1F3E0; Zpět na domů</button>
+            </div>
+        </div>
+    }
+    else if (currentExerciseIndex < exercises.Count)
+    {
+        <div class="exercise-area">
+            <button class="btn-details" @onclick="ToggleDetails">
+                &#x24D8; @(showDetails ? "Skrýt" : "Zobrazit") detaily
+            </button>
+
+            @if (showDetails)
+            {
+                <div class="details-panel">
+                    <span class="detail-mode">@((MarkupString)(durationType == "Time" ? "&#x23F1; Čas" : "&#x1F522; Počet"))</span>
+                    <span class="detail-item @(durationType == "Count" ? "detail-limit" : "")">
+                        @(completedExercises)@(durationType == "Count" ? $" / {exercises.Count}" : "") příkladů
+                    </span>
+                    <span class="detail-item @(durationType == "Time" ? "detail-limit" : "")">
+                        @TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss")@(durationType == "Time" ? $" / {TimeSpan.FromSeconds(durationSeconds).ToString(@"mm\:ss")}" : "")
+                    </span>
+                </div>
+            }
+
+            <div class="exercise-display">
+                @{
+                    var currentEx = exercises[currentExerciseIndex];
+                    var ex = currentEx.Exercise;
+                }
+                @if (ex.Segments.Count > 0)
+                {
+                    <div class="exercise-structured" @key="currentExerciseIndex" style="font-size: @GetExerciseFontSize()">
+                        @for (int si = 0; si < ex.Segments.Count; si++)
+                        {
+                            var seg = ex.Segments[si];
+                            var idx = si;
+                            @if (seg.ScratchValue.HasValue && currentSettings?.EnableScratchWork == true)
+                            {
+                                <span class="segment has-scratch">
+                                    <input type="number" inputmode="numeric"
+                                           class="scratch-input @GetScratchClass(idx)"
+                                           placeholder="?"
+                                           value="@GetScratchValue(idx)"
+                                           @oninput="@(e => OnScratchInput(idx, e))"
+                                           tabindex="@(idx + 1)" />
+                                    <span class="segment-text">@seg.Text</span>
+                                </span>
+                            }
+                            else
+                            {
+                                var isOp = seg.Text.Trim() is "+" or "-" or "×" or "÷";
+                                <span class="segment @(isOp ? "segment-op" : "")">
+                                    <span class="segment-text">@seg.Text</span>
+                                </span>
+                            }
+                        }
+                        <span class="segment segment-op"><span class="segment-text"> =</span></span>
+                    </div>
+                }
+                else
+                {
+                    <div class="exercise-text" @key="currentExerciseIndex" style="font-size: @GetExerciseFontSize()">
+                        @ex.DisplayText
+                    </div>
+                }
+            </div>
+
+            @if (enableReadAloud)
+            {
+                <button class="btn-speak" @onclick="SpeakCurrentExercise" title="Přečíst nahlas">&#x1F50A;</button>
+            }
+
+            @if (!currentEx.IsCorrect)
+            {
+                <div class="input-container">
+                    @if (currentEx.Attempts > 0 && !currentEx.IsCorrect)
+                    {
+                        <div class="wrong-answer">
+                            <span class="wrong-text">@currentEx.UserAnswer</span>
+                            <span class="hint-text">Nevadí, zkus znovu</span>
+                            @if (currentEx.Attempts >= 2)
+                            {
+                                <div class="hint-buttons">
+                                    @if (currentEx.Attempts >= 3)
+                                    {
+                                        <button class="btn-giveup" @onclick="ShowGiveUpDialog">&#x1F3F3;&#xFE0F; Dám se podat</button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <input type="number"
+                           @ref="answerInput"
+                           @bind="currentAnswer"
+                           @bind:event="oninput"
+                           @onkeydown="OnKeyDown"
+                           inputmode="numeric"
+                           placeholder="Odpověď"
+                           class="answer-input" />
+                </div>
+
+                <div class="button-container">
+                    <button class="btn-submit" @onclick="SubmitAnswer" disabled="@string.IsNullOrWhiteSpace(currentAnswer)">
+                        &#x2713; Potvrdit
+                    </button>
+                    <div class="secondary-buttons">
+                        <button class="btn-end" @onclick="ShowEndConfirmDialog">&#x25A0; Ukončit trénink</button>
+                        <button class="btn-skip" @onclick="ShowSkipConfirmDialog">&#x2192; Přeskočit</button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="correct-answer">
+                    <div class="correct-label">@currentEx.UserAnswer</div>
+                    <span class="checkmark">&#x2713;</span>
+                </div>
+            }
+        </div>
+    }
+
+    @if (showEndConfirm)
+    {
+        <div class="modal-overlay" @onclick="CancelEndTraining">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <h2>&#x26A0; Opravdu chceš skončit?</h2>
+                <p class="motivational-text">Už jsi zvládl @completedExercises příkladů!</p>
+                <p class="secondary-text">Pokud teď skončíš, uloží se tvůj progres.</p>
+                <div class="modal-buttons">
+                    <button class="btn-modal-cancel" @onclick="CancelEndTraining">&#x2190; Zůstat a pokračovat</button>
+                    <button class="btn-modal-confirm" @onclick="ConfirmEndTraining">&#x2713; Ano, ukončit</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (showSkipConfirm)
+    {
+        <div class="modal-overlay" @onclick="CancelSkip">
+            <div class="modal-content" @onclick:stopPropagation="true">
+                <h2>&#x2192; Přeskočit tento příklad?</h2>
+                <p class="motivational-text">Zkus to ještě! Určitě to zvládneš!</p>
+                <div class="modal-buttons">
+                    <button class="btn-modal-cancel" @onclick="CancelSkip">&#x2190; Zkusím to znovu</button>
+                    <button class="btn-modal-confirm" @onclick="ConfirmSkip">&#x2192; Přeskočit</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (showGiveUpDialog)
+    {
+        <div class="modal-overlay" @onclick="CloseGiveUpDialog">
+            <div class="modal-content hint-modal" @onclick:stopPropagation="true">
+                <h2>&#x1F4A1; Správné řešení</h2>
+                @if (currentExerciseIndex < exercises.Count)
+                {
+                    <div class="solution-box">
+                        <span class="solution-label">Správná odpověď:</span>
+                        <span class="solution-text">@exercises[currentExerciseIndex].Exercise.CorrectAnswer</span>
+                    </div>
+                }
+                <div class="modal-buttons">
+                    <button class="btn-modal-cancel" @onclick="ConfirmGiveUp">Rozumím, jdeme dál &#x2192;</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<SessionExerciseData> exercises = new();
+    private int currentExerciseIndex = 0;
+    private string currentAnswer = "";
+    private bool isSessionStarted = false;
+    private bool isSessionCompleted = false;
+    private bool isSaving = false;
+    private bool showDetails = false;
+    private ElementReference answerInput;
+    private int sessionId = 0;
+    private Stopwatch stopwatch = new();
+    private int elapsedSeconds = 0;
+    private int durationSeconds = 0;
+    private int completedExercises = 0;
+    private int totalExercisesSeen = 0;
+    private int correctFirstAttempt = 0;
+    private string durationType = "Time";
+    private bool showEndConfirm = false;
+    private bool showSkipConfirm = false;
+    private bool showGiveUpDialog = false;
+    private MixedMathTrainingSettings? currentSettings = null;
+    private MixedMathExerciseGenerator? _generator = null;
+    private bool enableReadAloud = false;
+
+    // Scratch work
+    private Dictionary<int, string> scratchValues = new();
+    private bool showScratchValidation = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = SessionService.GetCurrentMixedMathSettings() ?? new MixedMathTrainingSettings();
+        currentSettings = settings;
+        durationType = settings.DurationType;
+        enableReadAloud = settings.EnableReadAloud;
+        _generator = new MixedMathExerciseGenerator(settings);
+
+        if (settings.DurationType == "Time")
+        {
+            durationSeconds = settings.DurationValue * 60;
+            GenerateExercises(10);
+        }
+        else
+        {
+            durationSeconds = settings.DurationValue * 30;
+            GenerateExercises(settings.DurationValue);
+        }
+
+        sessionId = (await TrainingService.CreateSessionAsync(
+            ProfileService.CurrentProfileId,
+            durationSeconds,
+            settings.DurationType == "Count" ? settings.DurationValue : null,
+            "MIXED_MATH_100"
+        )).SessionId;
+
+        stopwatch.Start();
+        isSessionStarted = true;
+        _ = UpdateTimer();
+    }
+
+    private int _lastFocusedExerciseIndex = -1;
+    private int _lastSpokenExerciseIndex = -1;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (isSessionCompleted) return;
+        if (answerInput.Id == null) return;
+        if (currentExerciseIndex >= exercises.Count) return;
+
+        if (currentExerciseIndex != _lastFocusedExerciseIndex)
+        {
+            _lastFocusedExerciseIndex = currentExerciseIndex;
+            if (!firstRender) await Task.Delay(50);
+            await answerInput.FocusAsync();
+
+            if (enableReadAloud && currentExerciseIndex != _lastSpokenExerciseIndex)
+            {
+                _lastSpokenExerciseIndex = currentExerciseIndex;
+                await SpeakExerciseAsync(exercises[currentExerciseIndex].Exercise.DisplayText);
+            }
+        }
+    }
+
+    private void GenerateExercises(int count)
+    {
+        if (_generator == null) return;
+        exercises = Enumerable.Range(0, count).Select((_, idx) => new SessionExerciseData
+        {
+            Index = idx,
+            Exercise = _generator.GenerateExercise(),
+            StartTime = DateTime.UtcNow
+        }).ToList();
+    }
+
+    private void GenerateMoreExercises()
+    {
+        if (_generator == null || durationType != "Time") return;
+        var startIndex = exercises.Count;
+        for (int i = 0; i < 10; i++)
+        {
+            exercises.Add(new SessionExerciseData
+            {
+                Index = startIndex + i,
+                Exercise = _generator.GenerateExercise(),
+                StartTime = DateTime.UtcNow
+            });
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter")
+            await SubmitAnswer();
+    }
+
+    private async Task SubmitAnswer()
+    {
+        if (string.IsNullOrWhiteSpace(currentAnswer)) return;
+        if (!int.TryParse(currentAnswer, out int answer)) return;
+
+        var currentExercise = exercises[currentExerciseIndex];
+        currentExercise.Attempts++;
+        currentExercise.UserAnswer = answer;
+
+        if (answer == currentExercise.Exercise.CorrectAnswer)
+        {
+            currentExercise.IsCorrect = true;
+            currentExercise.TimeSpentSeconds = (int)(DateTime.UtcNow - currentExercise.StartTime).TotalSeconds;
+            if (currentExercise.Attempts == 1) correctFirstAttempt++;
+            completedExercises++;
+
+            if (elapsedSeconds >= durationSeconds && durationType == "Time")
+            {
+                await CompleteSessionAsync();
+                return;
+            }
+
+            currentExerciseIndex++;
+            currentAnswer = "";
+            ResetScratchState();
+
+            if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3)
+                GenerateMoreExercises();
+
+            if (currentExerciseIndex < exercises.Count)
+            {
+                exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
+                StateHasChanged();
+            }
+            else
+                await CompleteSessionAsync();
+        }
+        else
+        {
+            currentExercise.WrongAnswers.Add(answer);
+            currentAnswer = "";
+            showScratchValidation = true;
+            StateHasChanged();
+            if (answerInput.Id != null)
+                await answerInput.FocusAsync();
+        }
+    }
+
+    private async Task CompleteSessionAsync()
+    {
+        stopwatch.Stop();
+        isSessionCompleted = true;
+        isSaving = true;
+        StateHasChanged();
+
+        var exercisesToSave = exercises
+            .Where(e => e.Attempts > 0 || e.IsSkipped || e.GaveUp)
+            .Select(ex => new Data.Models.SessionExercise
+            {
+                SessionId = sessionId,
+                ExerciseIndex = ex.Index,
+                ExerciseText = ex.Exercise.DisplayText,
+                CorrectAnswer = ex.Exercise.CorrectAnswer,
+                UserAnswer = ex.UserAnswer ?? 0,
+                TimeSpentSeconds = ex.TimeSpentSeconds,
+                NumberOfAttempts = ex.Attempts,
+                IsCorrect = ex.IsCorrect,
+                SkippedByUser = ex.IsSkipped,
+                GaveUp = ex.GaveUp,
+                HintShown = ex.HintShown,
+                WrongAnswers = ex.WrongAnswers.Count > 0 ? string.Join(",", ex.WrongAnswers) : null
+            }).ToList();
+
+        totalExercisesSeen = exercisesToSave.Count;
+
+        try
+        {
+            if (totalExercisesSeen == 0)
+                await TrainingService.DeleteSessionAsync(sessionId);
+            else
+            {
+                await TrainingService.CompleteSessionAsync(sessionId, correctFirstAttempt, exercises.Sum(e => e.Attempts), exercisesToSave);
+                if (SessionService.ActivePreparedTrainingId.HasValue)
+                    await PreparedTrainingService.MarkAsCompletedAsync(SessionService.ActivePreparedTrainingId.Value);
+            }
+        }
+        catch (Exception ex) { Console.WriteLine($"!!! Error saving session: {ex.Message}"); }
+        finally { isSaving = false; }
+
+        StateHasChanged();
+    }
+
+    private void ToggleDetails() => showDetails = !showDetails;
+    private void GoHome() => Navigation.NavigateTo("/");
+    private void GoToStats() => Navigation.NavigateTo($"/stats?session={sessionId}");
+    private void GoToTrainingHub() => Navigation.NavigateTo("/training");
+
+    private void NextTraining()
+    {
+        if (SessionService.ActivePreparedTrainingId.HasValue)
+        {
+            SessionService.ClearActivePreparedTraining();
+            Navigation.NavigateTo("/training/prepared");
+        }
+        else
+            Navigation.NavigateTo("/training/mixedmath/setup");
+    }
+
+    private async Task UpdateTimer()
+    {
+        while (!isSessionCompleted && stopwatch.IsRunning)
+        {
+            await Task.Delay(1000);
+            elapsedSeconds = (int)stopwatch.Elapsed.TotalSeconds;
+            StateHasChanged();
+            if (elapsedSeconds >= durationSeconds && durationType == "Time" && currentExerciseIndex < exercises.Count)
+                await CompleteSessionAsync();
+        }
+    }
+
+    private void ShowEndConfirmDialog() => showEndConfirm = true;
+    private void CancelEndTraining() => showEndConfirm = false;
+    private async Task ConfirmEndTraining() { showEndConfirm = false; await CompleteSessionAsync(); }
+    private void ShowSkipConfirmDialog() => showSkipConfirm = true;
+    private void CancelSkip() => showSkipConfirm = false;
+
+    private async Task ConfirmSkip()
+    {
+        showSkipConfirm = false;
+        var cur = exercises[currentExerciseIndex];
+        cur.IsSkipped = true;
+        cur.TimeSpentSeconds = (int)(DateTime.UtcNow - cur.StartTime).TotalSeconds;
+        currentExerciseIndex++;
+        currentAnswer = "";
+        ResetScratchState();
+        if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3) GenerateMoreExercises();
+        if (currentExerciseIndex < exercises.Count) { exercises[currentExerciseIndex].StartTime = DateTime.UtcNow; StateHasChanged(); }
+        else await CompleteSessionAsync();
+    }
+
+    private void ShowGiveUpDialog() => showGiveUpDialog = true;
+    private void CloseGiveUpDialog() => showGiveUpDialog = false;
+
+    private async Task ConfirmGiveUp()
+    {
+        showGiveUpDialog = false;
+        var cur = exercises[currentExerciseIndex];
+        cur.TimeSpentSeconds = (int)(DateTime.UtcNow - cur.StartTime).TotalSeconds;
+        cur.GaveUp = true;
+        currentExerciseIndex++;
+        currentAnswer = "";
+        ResetScratchState();
+        if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3) GenerateMoreExercises();
+        if (currentExerciseIndex < exercises.Count) { exercises[currentExerciseIndex].StartTime = DateTime.UtcNow; StateHasChanged(); }
+        else await CompleteSessionAsync();
+    }
+
+    // Scratch work
+    private string GetScratchValue(int idx) => scratchValues.TryGetValue(idx, out var v) ? v : "";
+    private void OnScratchInput(int idx, ChangeEventArgs e) => scratchValues[idx] = e.Value?.ToString() ?? "";
+
+    private string GetScratchClass(int segmentIndex)
+    {
+        if (!showScratchValidation) return "";
+        if (!scratchValues.TryGetValue(segmentIndex, out var val) || string.IsNullOrWhiteSpace(val)) return "";
+        if (currentExerciseIndex >= exercises.Count) return "";
+        var segments = exercises[currentExerciseIndex].Exercise.Segments;
+        if (segmentIndex >= segments.Count) return "";
+        var expected = segments[segmentIndex].ScratchValue;
+        if (!expected.HasValue) return "";
+        return int.TryParse(val, out int parsed) && parsed == expected.Value ? "scratch-correct" : "scratch-wrong";
+    }
+
+    private void ResetScratchState() { scratchValues.Clear(); showScratchValidation = false; }
+
+    // TTS
+    private async Task SpeakCurrentExercise()
+    {
+        if (currentExerciseIndex >= exercises.Count) return;
+        await SpeakExerciseAsync(exercises[currentExerciseIndex].Exercise.DisplayText);
+    }
+
+    private async Task SpeakExerciseAsync(string displayText)
+    {
+        try
+        {
+            var spokenText = MathSpeechHelper.ToSpokenCzech(displayText);
+            await JSRuntime.InvokeVoidAsync("speechHelper.speak", spokenText, "cs-CZ");
+        }
+        catch { }
+    }
+
+    private string GetExerciseFontSize()
+    {
+        if (currentExerciseIndex >= exercises.Count) return "clamp(2.5rem, 12vw, 5rem)";
+        var len = exercises[currentExerciseIndex].Exercise.DisplayText.Length;
+        return len switch
+        {
+            <= 9  => "clamp(2.5rem, 12vw, 5rem)",
+            <= 13 => "clamp(2rem, 9vw, 4rem)",
+            <= 17 => "clamp(1.6rem, 7vw, 3.2rem)",
+            _     => "clamp(1.3rem, 5.5vw, 2.6rem)"
+        };
+    }
+
+    private static string PrikladText(int n) => n switch
+    {
+        1 => "příklad",
+        >= 2 and <= 4 => "příklady",
+        _ => "příkladů"
+    };
+}
+
+<style>
+    .training-session-container { position: fixed; top: 0; left: 0; width: 100%; height: var(--training-vh, 100%); display: flex; flex-direction: column; align-items: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0.75rem 1rem; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
+    .loading { color: white; font-size: 1.2rem; }
+    .exercise-area { width: 100%; max-width: 500px; height: 100%; display: flex; flex-direction: column; align-items: center; }
+    .btn-details { background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 0.35rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; align-self: flex-start; flex-shrink: 0; }
+    .btn-details:hover { background: rgba(255,255,255,0.3); }
+    .details-panel { width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.6rem; color: rgba(255,255,255,0.6); font-size: 0.82rem; margin-bottom: 0.75rem; padding: 0 0.5rem; flex-wrap: wrap; }
+    .detail-mode { background: rgba(255,255,255,0.15); padding: 0.15rem 0.5rem; border-radius: 10px; font-weight: 600; font-size: 0.75rem; color: rgba(255,255,255,0.85); }
+    .detail-item { white-space: nowrap; }
+    .detail-item.detail-limit { color: rgba(255,255,255,0.9); font-weight: 600; }
+    .exercise-display { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; min-height: clamp(3.2rem, 15vw, 6.5rem); }
+    .exercise-text { font-weight: bold; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); text-align: center; line-height: 1.2; white-space: nowrap; animation: exampleIn 0.18s ease; }
+    .exercise-structured { display: inline-flex; align-items: flex-end; justify-content: center; gap: 0; font-weight: bold; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); line-height: 1.2; animation: exampleIn 0.18s ease; flex-wrap: wrap; }
+    .segment { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+    .segment.has-scratch { /* číslo + scratch nad ním */ }
+    .segment.segment-op { align-self: flex-end; padding-bottom: 0.05em; }
+    .segment-text { white-space: pre; }
+    .scratch-input { display: block; width: 2.5em; font-size: 0.38em; font-weight: 700; text-align: center; padding: 0.15em 0.2em; margin-bottom: 0.15em; border: none; border-bottom: 2px dashed rgba(255,255,255,0.4); border-radius: 6px 6px 0 0; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); outline: none; transition: border-color 0.2s, background 0.2s, box-shadow 0.2s; -moz-appearance: textfield; }
+    .scratch-input::placeholder { color: rgba(255,255,255,0.28); font-weight: 400; }
+    .scratch-input:focus { border-bottom-color: rgba(255,215,0,0.7); background: rgba(255,255,255,0.15); box-shadow: 0 2px 8px rgba(255,215,0,0.15); }
+    .scratch-input::-webkit-outer-spin-button, .scratch-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .scratch-correct { border-color: #48bb78 !important; background: rgba(72,187,120,0.2) !important; color: #c8ffc8; }
+    .scratch-wrong { border-color: #f56565 !important; background: rgba(245,101,101,0.2) !important; color: #ffe0b0; }
+    .btn-speak { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.85); border: 1px solid rgba(255,255,255,0.3); border-radius: 50%; width: 2.4rem; height: 2.4rem; font-size: 1.1rem; cursor: pointer; transition: all 0.15s; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-bottom: 0.3rem; }
+    .btn-speak:hover { background: rgba(255,255,255,0.25); transform: scale(1.1); }
+    .btn-speak:active { transform: scale(0.95); }
+    @@keyframes exampleIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+    .input-container { width: 100%; max-width: 400px; flex-shrink: 0; margin-bottom: 0.5rem; }
+    .answer-input { width: 100%; padding: 1rem; font-size: 1.5rem; text-align: center; border: 2px solid white; border-radius: 8px; background: white; color: #333; }
+    .answer-input:focus { outline: none; border-color: #4CAF50; box-shadow: 0 0 0 3px rgba(76,175,80,0.2); }
+    .wrong-answer { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; margin-bottom: 0.5rem; text-align: center; }
+    .wrong-text { font-size: 1.4rem; font-weight: 600; color: #ff9800; text-decoration: line-through; text-decoration-thickness: 2px; }
+    .hint-text { font-size: 0.82rem; color: rgba(255,255,255,0.65); }
+    .hint-buttons { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-top: 0.4rem; }
+    .btn-giveup { padding: 0.3rem 0.8rem; font-size: 0.8rem; font-weight: 600; background: rgba(255,100,80,0.2); color: rgba(255,210,200,0.95); border: 1px solid rgba(255,120,100,0.4); border-radius: 20px; cursor: pointer; }
+    .btn-giveup:hover { background: rgba(255,100,80,0.35); }
+    .correct-answer { display: flex; align-items: center; gap: 1rem; flex: 1; justify-content: center; }
+    .correct-label { font-size: 2rem; color: #4CAF50; font-weight: bold; }
+    .checkmark { font-size: 2rem; color: #4CAF50; }
+    .button-container { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; max-width: 400px; flex-shrink: 0; padding-bottom: 0.25rem; }
+    .secondary-buttons { display: flex; gap: 1rem; justify-content: center; }
+    .btn-submit { padding: 0.75rem 2rem; font-size: 1.1rem; font-weight: bold; background: #4CAF50; color: white; border: 2px solid rgba(255,255,255,0.4); border-radius: 8px; cursor: pointer; transition: all 0.3s ease; width: 100%; }
+    .btn-submit:hover:not(:disabled) { background: #45a049; transform: scale(1.05); }
+    .btn-submit:disabled { background: rgba(255,255,255,0.2); color: rgba(255,255,255,0.5); cursor: not-allowed; border-color: rgba(255,255,255,0.2); }
+    .btn-skip, .btn-end { padding: 0.4rem 0.75rem; font-size: 0.8rem; background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; cursor: pointer; flex: 1; transition: all 0.3s ease; }
+    .btn-skip:hover { background: rgba(255,255,255,0.25); }
+    .btn-end { background: rgba(255,100,100,0.15); border-color: rgba(255,100,100,0.3); color: rgba(255,200,200,0.9); }
+    .btn-end:hover { background: rgba(255,100,100,0.25); }
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; justify-content: center; align-items: center; z-index: 1000; animation: fadeIn 0.3s ease; }
+    .modal-content { background: white; padding: 2rem; border-radius: 12px; max-width: 400px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.3); animation: slideUp 0.3s ease; }
+    .modal-content h2 { margin: 0 0 1rem 0; color: #333; font-size: 1.5rem; text-align: center; }
+    .motivational-text { font-size: 1.1rem; color: #4CAF50; font-weight: 600; text-align: center; margin: 1rem 0; }
+    .secondary-text { font-size: 0.9rem; color: #666; text-align: center; margin-bottom: 1.5rem; }
+    .modal-buttons { display: flex; gap: 1rem; flex-direction: column; }
+    .btn-modal-cancel { padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    .btn-modal-cancel:hover { background: #45a049; }
+    .btn-modal-confirm { padding: 0.75rem 1.5rem; font-size: 0.9rem; background: #f5f5f5; color: #666; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; }
+    .btn-modal-confirm:hover { background: #e0e0e0; }
+    .hint-modal { max-width: 440px; }
+    .solution-box { background: linear-gradient(135deg, #f0f4ff, #e8f0fe); border: 2px solid #667eea; border-radius: 12px; padding: 0.85rem 1.25rem; margin-bottom: 1.25rem; text-align: center; }
+    .solution-label { display: block; font-size: 0.78rem; font-weight: 600; color: #667eea; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.3rem; }
+    .solution-text { font-size: 1.6rem; font-weight: 800; color: #333; }
+    .results-container { background: white; padding: 2rem; border-radius: 8px; max-width: 500px; width: 100%; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin: auto; max-height: 90dvh; overflow-y: auto; }
+    .results-container h1 { font-size: 2.5rem; margin-bottom: 1.5rem; color: #4CAF50; }
+    .results-summary { margin-bottom: 2rem; }
+    .result-item { display: flex; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid #eee; }
+    .result-label { font-weight: 500; color: #666; }
+    .result-value { font-weight: bold; color: #333; font-size: 1.1rem; }
+    .results-actions { display: flex; flex-direction: column; gap: 0.6rem; width: 100%; max-width: 360px; margin: 0 auto; }
+    .btn-result-primary { width: 100%; padding: 0.85rem 1.5rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+    .btn-result-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
+    .btn-result-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+    .results-ghost-row { display: flex; gap: 0.5rem; }
+    .btn-result-ghost { flex: 1; padding: 0.65rem 0.75rem; background: transparent; color: #667eea; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .btn-result-ghost:hover:not(:disabled) { border-color: #667eea; background: rgba(102,126,234,0.05); }
+    .btn-result-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-result-ghost.full-width { color: #a0aec0; font-weight: 500; }
+    @@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @@keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @@media (max-width: 480px) { .training-session-container { padding: 0.5rem 0.75rem; } .answer-input { padding: 0.6rem; font-size: 1.3rem; } .btn-submit { padding: 0.65rem; font-size: 1rem; } .results-container { padding: 1.25rem; } .results-container h1 { font-size: 1.6rem; } }
+</style>

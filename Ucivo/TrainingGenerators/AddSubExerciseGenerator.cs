@@ -168,6 +168,7 @@ public class AddSubExerciseGenerator
     {
         int result;
         string display;
+        List<ExerciseSegment>? segments = null;
 
         switch (pattern)
         {
@@ -175,34 +176,70 @@ public class AddSubExerciseGenerator
                 result = a + b + c;
                 if (result > 100) return null;
                 display = $"{a} + ({b} + {c})";
+                if (_settings.EnableScratchWork)
+                    segments = [
+                        new() { Text = $"{a}" },
+                        new() { Text = " + " },
+                        new() { Text = $"({b} + {c})", ScratchValue = b + c }
+                    ];
                 break;
             case 1: // a - (b + c)
                 result = a - b - c;
                 if (result < 0) return null;
                 display = $"{a} - ({b} + {c})";
+                if (_settings.EnableScratchWork)
+                    segments = [
+                        new() { Text = $"{a}" },
+                        new() { Text = " - " },
+                        new() { Text = $"({b} + {c})", ScratchValue = b + c }
+                    ];
                 break;
             case 2: // (a + b) - c
                 if (a + b > 100) return null;
                 result = a + b - c;
                 if (result < 0) return null;
                 display = $"({a} + {b}) - {c}";
+                if (_settings.EnableScratchWork)
+                    segments = [
+                        new() { Text = $"({a} + {b})", ScratchValue = a + b },
+                        new() { Text = " - " },
+                        new() { Text = $"{c}" }
+                    ];
                 break;
             case 3: // (a - b) + c
                 if (a <= b) return null;
                 result = a - b + c;
                 if (result > 100) return null;
                 display = $"({a} - {b}) + {c}";
+                if (_settings.EnableScratchWork)
+                    segments = [
+                        new() { Text = $"({a} - {b})", ScratchValue = a - b },
+                        new() { Text = " + " },
+                        new() { Text = $"{c}" }
+                    ];
                 break;
             case 4: // a + (b - c)
                 if (b <= c) return null;
                 result = a + (b - c);
                 if (result > 100) return null;
                 display = $"{a} + ({b} - {c})";
+                if (_settings.EnableScratchWork)
+                    segments = [
+                        new() { Text = $"{a}" },
+                        new() { Text = " + " },
+                        new() { Text = $"({b} - {c})", ScratchValue = b - c }
+                    ];
                 break;
             default: // (a + b) + c
                 result = a + b + c;
                 if (result > 100) return null;
                 display = $"({a} + {b}) + {c}";
+                if (_settings.EnableScratchWork)
+                    segments = [
+                        new() { Text = $"({a} + {b})", ScratchValue = a + b },
+                        new() { Text = " + " },
+                        new() { Text = $"{c}" }
+                    ];
                 break;
         }
 
@@ -211,7 +248,8 @@ public class AddSubExerciseGenerator
             FirstNumber = 0, SecondNumber = 0,
             Operation = "parentheses",
             CorrectAnswer = result,
-            DisplayText = display
+            DisplayText = display,
+            Segments = segments ?? []
         };
     }
 
@@ -221,9 +259,12 @@ public class AddSubExerciseGenerator
 
     private Exercise? TryGenerateMultipleNumbers()
     {
+        var counts = _settings.MultipleNumbersCounts;
+        if (counts.Count == 0) counts = [3, 4, 5, 6];
+
         for (int attempt = 0; attempt < 80; attempt++)
         {
-            int count = _random.Next(3, 7);
+            int count = counts[_random.Next(counts.Count)];
             var numbers = new List<int>();
             var ops = new List<char>();
 
@@ -248,16 +289,40 @@ public class AddSubExerciseGenerator
             }
             if (!valid) continue;
 
+            // DisplayText
             var sb = new System.Text.StringBuilder(numbers[0].ToString());
             for (int i = 0; i < ops.Count; i++)
                 sb.Append($" {ops[i]} {numbers[i + 1]}");
+
+            // Segmenty s mezivýpočty (pokud je povoleno)
+            // Každé číslo a znaménko je vlastní segment. Scratch nad číslem = mezivýsledek po tomto kroku.
+            var segments = new List<ExerciseSegment>();
+            if (_settings.EnableScratchWork)
+            {
+                // První číslo (bez scratch)
+                segments.Add(new ExerciseSegment { Text = numbers[0].ToString() });
+
+                int running = numbers[0];
+                for (int i = 0; i < ops.Count; i++)
+                {
+                    running = ops[i] == '+' ? running + numbers[i + 1] : running - numbers[i + 1];
+
+                    // Znaménko
+                    segments.Add(new ExerciseSegment { Text = $" {ops[i]} " });
+
+                    // Číslo – scratch slot KROMĚ posledního kroku (ten je finální odpověď)
+                    int? scratch = (i < ops.Count - 1) ? running : null;
+                    segments.Add(new ExerciseSegment { Text = numbers[i + 1].ToString(), ScratchValue = scratch });
+                }
+            }
 
             return new Exercise
             {
                 FirstNumber = 0, SecondNumber = 0,
                 Operation = "multi",
                 CorrectAnswer = result,
-                DisplayText = sb.ToString()
+                DisplayText = sb.ToString(),
+                Segments = segments
             };
         }
         return null;

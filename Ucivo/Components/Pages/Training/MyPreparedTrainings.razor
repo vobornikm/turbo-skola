@@ -293,6 +293,12 @@
                 Navigation.NavigateTo("/training/czech/paired-consonants/session");
                 break;
 
+            case "MIXED_MATH_100":
+                var mixedSettings = JsonSerializer.Deserialize<MixedMathTrainingSettings>(training.SettingsJson);
+                if (mixedSettings != null) SessionService.SetCurrentMixedMathSettings(mixedSettings);
+                Navigation.NavigateTo("/training/mixedmath/session");
+                break;
+
             default:
                 Navigation.NavigateTo("/training");
                 break;
@@ -332,6 +338,7 @@
         "SMALL_MULTIPLICATION" => "✖️",
         "ADD_SUB_100" => "➕",
         "PAIRED_CONSONANTS" => "🔤",
+        "MIXED_MATH_100" => "🧮",
         _ => "📝"
     };
 
@@ -340,6 +347,7 @@
         "SMALL_MULTIPLICATION" => "Malá násobilka",
         "ADD_SUB_100" => "Sčítání a odčítání do 100",
         "PAIRED_CONSONANTS" => "Párové souhlásky",
+        "MIXED_MATH_100" => "Smíšené počítání do 100",
         _ => "Trénink"
     };
 

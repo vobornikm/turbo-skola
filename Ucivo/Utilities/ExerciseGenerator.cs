@@ -4,9 +4,15 @@ public class Exercise
 {
     public int FirstNumber { get; set; }
     public int SecondNumber { get; set; }
-    public string Operation { get; set; } = string.Empty; // "×" nebo "÷"
+    public string Operation { get; set; } = string.Empty; // "Ã—" nebo "Ã·"
     public int CorrectAnswer { get; set; }
     public string DisplayText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// StrukturovanÃ© segmenty vÃ½razu pro zobrazenÃ­ s mezivÃ½poÄty.
+    /// Pokud je prÃ¡zdnÃ©, pouÅ¾ije se DisplayText jako prostÃ½ text.
+    /// </summary>
+    public List<ExerciseSegment> Segments { get; set; } = [];
 }
 
 public class ExerciseGenerator
@@ -21,12 +27,12 @@ public class ExerciseGenerator
     {
         if (!includeMultiplication && !includeDivision)
         {
-            throw new ArgumentException("Musí bıt vybrána alespoò jedna operace.");
+            throw new ArgumentException("MusÃ­ bÃ½t vybrÃ¡na alespoÅˆ jedna operace.");
         }
 
         if (includedMultipliers.Count == 0)
         {
-            throw new ArgumentException("Musí bıt vybrán alespoò jeden násobitel.");
+            throw new ArgumentException("MusÃ­ bÃ½t vybrÃ¡n alespoÅˆ jeden nÃ¡sobitel.");
         }
 
         var exercises = new List<Exercise>();
@@ -46,32 +52,32 @@ public class ExerciseGenerator
         bool includeDivision)
     {
         var operations = new List<string>();
-        if (includeMultiplication) operations.Add("×");
-        if (includeDivision) operations.Add("÷");
+        if (includeMultiplication) operations.Add("Ã—");
+        if (includeDivision) operations.Add("Ã·");
 
         var operation = operations[_random.Next(operations.Count)];
-        
-        // Pro dìlení vyfiltrovat 0 z násobitelù (nulou nelze dìlit!)
+
+        // Pro dÄ›lenÃ­ vyfiltrovat 0 z nÃ¡sobitelÅ¯ (nulou nelze dÄ›lit!)
         List<int> availableMultipliers = includedMultipliers;
-        if (operation == "÷")
+        if (operation == "Ã·")
         {
             availableMultipliers = includedMultipliers.Where(m => m != 0).ToList();
-            
-            // Pokud po filtraci nezùstal ádnı násobitel, pouij násobení místo toho
+
+            // Pokud po filtraci nezÅ¯stal Å¾Ã¡dnÃ½ nÃ¡sobitel, pouÅ¾ij nÃ¡sobenÃ­ mÃ­sto toho
             if (availableMultipliers.Count == 0)
             {
-                operation = "×";
+                operation = "Ã—";
                 availableMultipliers = includedMultipliers;
             }
         }
-        
+
         var multiplier = availableMultipliers[_random.Next(availableMultipliers.Count)];
 
         Exercise exercise;
 
-        if (operation == "×")
+        if (operation == "Ã—")
         {
-            // Násobení: number (1-10) × multiplier
+            // NÃ¡sobenÃ­: number (1-10) Ã— multiplier
             var number = _random.Next(1, 11);
             var correctAnswer = number * multiplier;
 
@@ -79,15 +85,15 @@ public class ExerciseGenerator
             {
                 FirstNumber = number,
                 SecondNumber = multiplier,
-                Operation = "×",
+                Operation = "Ã—",
                 CorrectAnswer = correctAnswer,
-                DisplayText = $"{number} × {multiplier}"
+                DisplayText = $"{number} Ã— {multiplier}"
             };
         }
         else
         {
-            // Dìlení: (multiplier × number) ÷ multiplier = number
-            // multiplier je teï zaruèenì != 0
+            // DÄ›lenÃ­: (multiplier Ã— number) Ã· multiplier = number
+            // multiplier je teÄ zaruÄenÄ› != 0
             var number = _random.Next(1, 11);
             var dividend = multiplier * number;
             var divisor = multiplier;
@@ -96,9 +102,9 @@ public class ExerciseGenerator
             {
                 FirstNumber = dividend,
                 SecondNumber = divisor,
-                Operation = "÷",
+                Operation = "Ã·",
                 CorrectAnswer = number,
-                DisplayText = $"{dividend} ÷ {divisor}"
+                DisplayText = $"{dividend} Ã· {divisor}"
             };
         }
 

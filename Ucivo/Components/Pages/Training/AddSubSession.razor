@@ -12,6 +12,7 @@
 @inject IProfileService ProfileService
 @inject IPreparedTrainingService PreparedTrainingService
 @inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Trénink - Sčítání a odčítání</PageTitle>
 
@@ -92,10 +93,54 @@
             }
 
             <div class="exercise-display">
-                <div class="exercise-text" @key="currentExerciseIndex" style="font-size: @GetExerciseFontSize()">
-                    @exercises[currentExerciseIndex].Exercise.DisplayText
-                </div>
+                @{
+                    var currentEx = exercises[currentExerciseIndex];
+                    var ex = currentEx.Exercise;
+                }
+                @if (ex.Segments.Count > 0)
+                {
+                    <div class="exercise-structured" @key="currentExerciseIndex" style="font-size: @GetExerciseFontSize()">
+                        @for (int si = 0; si < ex.Segments.Count; si++)
+                        {
+                            var seg = ex.Segments[si];
+                            var idx = si;
+                            @if (seg.ScratchValue.HasValue)
+                            {
+                                <span class="segment has-scratch">
+                                    <input type="number"
+                                           inputmode="numeric"
+                                           class="scratch-input @(GetScratchCssClass(idx))"
+                                           placeholder="?"
+                                           value="@GetScratchDisplayValue(idx)"
+                                           @oninput="@(e => OnScratchInput(idx, e))"
+                                           tabindex="@(idx + 1)" />
+                                    <span class="segment-text">@seg.Text</span>
+                                </span>
+                            }
+                            else
+                            {
+                                var isOp = seg.Text.Trim() is "+" or "-";
+                                <span class="segment @(isOp ? "segment-op" : "")">
+                                    <span class="segment-text">@seg.Text</span>
+                                </span>
+                            }
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="exercise-text" @key="currentExerciseIndex" style="font-size: @GetExerciseFontSize()">
+                        @ex.DisplayText
+                    </div>
+                }
             </div>
+
+            @if (enableReadAloud)
+            {
+                <button class="btn-speak" @onclick="SpeakCurrentExercise" title="Přečíst nahlas">
+                    &#x1F50A;
+                </button>
+            }
 
             @if (!exercises[currentExerciseIndex].IsCorrect)
             {
@@ -235,11 +280,19 @@
     private AddSubTrainingSettings? currentSettings = null;
     private AddSubExerciseGenerator? _generator = null;
 
+    // Scratch work (mezivýpočty)
+    private Dictionary<int, string> scratchValues = new();  // segmentIndex → user input
+    private bool showScratchValidation = false;             // true po špatné odpovědi
+
+    // Text-to-Speech
+    private bool enableReadAloud = false;
+
     protected override async Task OnInitializedAsync()
     {
         var settings = SessionService.GetCurrentAddSubSettings() ?? new AddSubTrainingSettings();
         currentSettings = settings;
         durationType = settings.DurationType;
+        enableReadAloud = settings.EnableReadAloud;
         _generator = new AddSubExerciseGenerator(settings);
 
         if (settings.DurationType == "Time")
@@ -266,6 +319,7 @@
     }
 
     private int _lastFocusedExerciseIndex = -1;
+    private int _lastSpokenExerciseIndex = -1;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -278,6 +332,13 @@
             _lastFocusedExerciseIndex = currentExerciseIndex;
             if (!firstRender) await Task.Delay(50);
             await answerInput.FocusAsync();
+
+            // Auto-read nový příklad
+            if (enableReadAloud && currentExerciseIndex != _lastSpokenExerciseIndex)
+            {
+                _lastSpokenExerciseIndex = currentExerciseIndex;
+                await SpeakExerciseAsync(exercises[currentExerciseIndex].Exercise.DisplayText);
+            }
         }
     }
 
@@ -347,6 +408,7 @@
 
             currentExerciseIndex++;
             currentAnswer = "";
+            ResetScratchState();
 
             if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3)
             {
@@ -367,6 +429,8 @@
         {
             currentExercise.WrongAnswers.Add(answer);
             currentAnswer = "";
+            // Při špatné odpovědi zobrazit validaci mezivýpočtů
+            showScratchValidation = true;
             StateHasChanged();
             if (answerInput.Id != null)
                 await answerInput.FocusAsync();
@@ -381,6 +445,7 @@
 
         currentExerciseIndex++;
         currentAnswer = "";
+        ResetScratchState();
 
         if (currentExerciseIndex < exercises.Count)
         {
@@ -549,6 +614,7 @@
 
         currentExerciseIndex++;
         currentAnswer = "";
+        ResetScratchState();
 
         if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3)
             GenerateMoreExercises();
@@ -714,6 +780,70 @@
         _ => "příkladů"
     };
 
+    // ============================================================
+    // SCRATCH WORK (mezivýpočty)
+    // ============================================================
+
+    private void OnScratchInput(int segmentIndex, ChangeEventArgs e)
+    {
+        scratchValues[segmentIndex] = e.Value?.ToString() ?? "";
+        // Při novém vstupu resetujeme validaci (dítě opravuje)
+        showScratchValidation = false;
+    }
+
+    private string GetScratchDisplayValue(int segmentIndex)
+    {
+        return scratchValues.TryGetValue(segmentIndex, out var val) ? val : "";
+    }
+
+    private string GetScratchCssClass(int segmentIndex)
+    {
+        if (!showScratchValidation) return "";
+
+        if (!scratchValues.TryGetValue(segmentIndex, out var val) || string.IsNullOrWhiteSpace(val))
+            return ""; // Prázdný → neutrální (dítě ho nepoužilo)
+
+        if (currentExerciseIndex >= exercises.Count) return "";
+        var segments = exercises[currentExerciseIndex].Exercise.Segments;
+        if (segmentIndex >= segments.Count) return "";
+
+        var expected = segments[segmentIndex].ScratchValue;
+        if (!expected.HasValue) return "";
+
+        return int.TryParse(val, out int parsed) && parsed == expected.Value
+            ? "scratch-correct"
+            : "scratch-wrong";
+    }
+
+    private void ResetScratchState()
+    {
+        scratchValues.Clear();
+        showScratchValidation = false;
+    }
+
+    // ============================================================
+    // TEXT-TO-SPEECH
+    // ============================================================
+
+    private async Task SpeakCurrentExercise()
+    {
+        if (currentExerciseIndex >= exercises.Count) return;
+        await SpeakExerciseAsync(exercises[currentExerciseIndex].Exercise.DisplayText);
+    }
+
+    private async Task SpeakExerciseAsync(string displayText)
+    {
+        try
+        {
+            var spokenText = MathSpeechHelper.ToSpokenCzech(displayText);
+            await JSRuntime.InvokeVoidAsync("speechHelper.speak", spokenText, "cs-CZ");
+        }
+        catch
+        {
+            // Speech API nemusí být dostupné – ignorujeme
+        }
+    }
+
     private string GetExerciseFontSize()
     {
         if (currentExerciseIndex >= exercises.Count) return "clamp(2.5rem, 12vw, 5rem)";
@@ -816,6 +946,32 @@
         justify-content: center;
         width: 100%;
         min-height: clamp(3.2rem, 15vw, 6.5rem);
+    }
+
+    .btn-speak {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        width: 2.4rem;
+        height: 2.4rem;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.15s;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.3rem;
+    }
+
+    .btn-speak:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: scale(1.1);
+    }
+
+    .btn-speak:active {
+        transform: scale(0.95);
     }
 
     .exercise-text {
@@ -1334,6 +1490,90 @@
         .results-container h1 {
             font-size: 1.6rem;
         }
+    }
+
+    /* ============================================================
+       SCRATCH WORK / MEZIVÝPOČTY
+       ============================================================ */
+    .exercise-structured {
+        display: inline-flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 0;
+        font-weight: bold;
+        color: white;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        animation: exampleIn 0.18s ease;
+        flex-wrap: wrap;
+    }
+
+    .segment {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+    }
+
+    .segment.has-scratch {
+        /* Segment s mezivýpočtem: číslo + scratch nad ním */
+    }
+
+    .segment.segment-op {
+        /* Znaménko – zarovnat s baseline čísel (spodní řádek) */
+        align-self: flex-end;
+        padding-bottom: 0.05em;
+    }
+
+    .scratch-input {
+        display: block;
+        width: 2.5em;
+        font-size: 0.38em;
+        font-weight: 700;
+        text-align: center;
+        padding: 0.15em 0.2em;
+        margin-bottom: 0.15em;
+        border: none;
+        border-bottom: 2px dashed rgba(255, 255, 255, 0.4);
+        border-radius: 6px 6px 0 0;
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.85);
+        outline: none;
+        transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+        -moz-appearance: textfield;
+    }
+
+    .scratch-input::placeholder {
+        color: rgba(255, 255, 255, 0.28);
+        font-weight: 400;
+    }
+
+    .scratch-input:focus {
+        border-bottom-color: rgba(255, 215, 0, 0.7);
+        background: rgba(255, 255, 255, 0.15);
+        box-shadow: 0 2px 8px rgba(255, 215, 0, 0.15);
+    }
+
+    .scratch-input::-webkit-outer-spin-button,
+    .scratch-input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    /* Validace mezivýpočtů – zobrazí se po špatné odpovědi */
+    .scratch-input.scratch-correct {
+        background: rgba(76, 175, 80, 0.3);
+        border-bottom-color: #4CAF50;
+        color: #c8ffc8;
+    }
+
+    .scratch-input.scratch-wrong {
+        background: rgba(255, 152, 0, 0.3);
+        border-bottom-color: #ff9800;
+        color: #ffe0b0;
+    }
+
+    .segment-text {
+        white-space: pre; /* zachovat mezery v znaménkách " + " */
     }
 </style>
 

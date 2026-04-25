@@ -146,7 +146,7 @@
                     <div class="answer-buttons-container">
                         @foreach (var option in currentAnswerOptions)
                         {
-                            <button class="answer-btn" @onclick="() => SubmitButtonAnswer(option)">
+                            <button class="answer-btn" @key="option" @onclick="() => SubmitButtonAnswer(option)">
                                 @option.ToUpper()
                             </button>
                         }
@@ -409,7 +409,12 @@
         currentExercise.Attempts++;
         currentExercise.UserAnswer = answer;
 
-        if (currentExercise.Exercise.AcceptedAnswers.Contains(answer))
+        // Normalizace na NFC pro korektní porovnání Unicode (ď vs d+combining caron)
+        var normalizedAnswer = answer.Normalize();
+        var isCorrect = currentExercise.Exercise.AcceptedAnswers
+            .Any(a => string.Equals(a.Normalize(), normalizedAnswer, StringComparison.OrdinalIgnoreCase));
+
+        if (isCorrect)
         {
             currentExercise.IsCorrect = true;
             currentExercise.TimeSpentSeconds = (int)(DateTime.UtcNow - currentExercise.StartTime).TotalSeconds;
@@ -418,8 +423,10 @@
             completedExercises++;
 
             // Pokud odpověděl jedním z více platných písmen, ukáž odpovídající celé slovo
-            if (currentExercise.Exercise.AnswerToFullWord.TryGetValue(answer, out var matchedWord))
-                currentExercise.Exercise.FullWord = matchedWord;
+            var matchedEntry = currentExercise.Exercise.AnswerToFullWord
+                .FirstOrDefault(kv => string.Equals(kv.Key.Normalize(), normalizedAnswer, StringComparison.OrdinalIgnoreCase));
+            if (matchedEntry.Key != null)
+                currentExercise.Exercise.FullWord = matchedEntry.Value;
 
             if (currentSettings!.ShowFullWordAfterAnswer)
             {

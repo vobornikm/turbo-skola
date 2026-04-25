@@ -11,6 +11,7 @@ public class UserSettings
     public bool IncludeDivision { get; set; } = false;
     public string? AddSubSettingsJson { get; set; }
     public string? PairedConsonantsSettingsJson { get; set; }
+    public string? MixedMathSettingsJson { get; set; }
     public DateTime LastModified { get; set; }
 
     // Relationships

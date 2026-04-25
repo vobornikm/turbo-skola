@@ -144,6 +144,25 @@
             }
         </div>
 
+        <!-- PŘÍSTUPNOST -->
+        <div class="form-section op-section accessibility-section">
+            <h3>🔊 Přístupnost</h3>
+            <div class="toggles-container">
+                <div class="toggle-item" @onclick="() => { settings.EnableReadAloud = !settings.EnableReadAloud; StateHasChanged(); }">
+                    <div class="toggle-label">
+                        <span class="toggle-icon">🗣️</span>
+                        <div>
+                            <div>Číst příklady nahlas</div>
+                            <div class="toggle-hint">Každý nový příklad se automaticky přečte</div>
+                        </div>
+                    </div>
+                    <div class="toggle-switch @(settings.EnableReadAloud ? "on" : "off")">
+                        <div class="toggle-knob"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- VELKÉ TLAČÍTKO START -->
         <div class="start-section">
             <button class="btn-start-modern @(IsValid() ? "" : "disabled")"
@@ -571,6 +590,17 @@
 
     .toggle-icon {
         font-size: 1.5rem;
+    }
+
+    .toggle-hint {
+        font-size: 0.78rem;
+        color: #999;
+        font-weight: 400;
+        margin-top: 0.1rem;
+    }
+
+    .accessibility-section {
+        border-left: 4px solid #38b2ac;
     }
 
     .toggle-switch {

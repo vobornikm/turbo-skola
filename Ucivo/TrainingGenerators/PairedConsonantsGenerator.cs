@@ -44,13 +44,22 @@ public class PairedConsonantsGenerator
     private readonly List<PcWord> _filteredWords;
     private readonly HashSet<int> _usedIndices = [];
 
+    /// <summary>
+    /// Lookup: WordWithBlank → všechna slova se stejnou mezerou (i z jiných párů).
+    /// Slouží k detekci cross-pair nejednoznačnosti (pá_ → pás z Z/S, páž z Ž/Š).
+    /// </summary>
+    private readonly Dictionary<string, List<PcWord>> _blankToWords;
+
     public PairedConsonantsGenerator(PairedConsonantsTrainingSettings settings, HashSet<string>? blockedWords = null)
     {
         _settings = settings;
 
+        // Normalizované páry pro korektní porovnání Unicode (NFC)
+        var normalizedPairs = new HashSet<string>(_settings.SelectedPairs.Select(p => p.Normalize()));
+
         // Filtrovat slova podle nastavení
         _filteredWords = PairedConsonantsWordBank.AllWords
-            .Where(w => _settings.SelectedPairs.Contains(w.Pair))
+            .Where(w => normalizedPairs.Contains(w.Pair.Normalize()))
             .Where(w => _settings.SoundPosition switch
             {
                 "End" => w.Position == "End",
@@ -59,6 +68,11 @@ public class PairedConsonantsGenerator
             })
             .Where(w => blockedWords == null || !blockedWords.Contains(w.FullWord.ToLower()))
             .ToList();
+
+        // Pre-compute: blank → všechna slova s tímto blankem (across all selected pairs)
+        _blankToWords = _filteredWords
+            .GroupBy(w => w.WordWithBlank)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     /// <summary>
@@ -86,29 +100,34 @@ public class PairedConsonantsGenerator
         _usedIndices.Add(idx);
         var word = _filteredWords[idx];
 
-        var parts = word.Pair.Split('_');
+        var parts = word.Pair.Normalize().Split('_');
         var exercise = new CzechExercise
         {
             Pair = word.Pair,
             FullWord = word.FullWord,
             WordWithBlank = word.WordWithBlank,
-            CorrectLetter = word.CorrectLetter,
+            CorrectLetter = word.CorrectLetter.Normalize(),
             PairOption1 = parts[0].ToLower(),
             PairOption2 = parts[1].ToLower(),
             Position = word.Position
         };
 
-        // Zkontroluj nejednoznačnost (obě písmena tvoří platné slovo)
-        var key = (word.WordWithBlank, word.Pair);
-        if (PairedConsonantsWordBank.AmbiguousBlanks.TryGetValue(key, out var ambiguous))
+        // Akceptované odpovědi: všechna písmena ze VŠECH vybraných párů,
+        // která pro tento blank tvoří platné slovo.
+        // Např. "pá_" → "s" (pás, Z/S), "ž" (páž, Ž/Š) – obojí platné.
+        if (_blankToWords.TryGetValue(word.WordWithBlank, out var wordsWithSameBlank))
         {
-            exercise.AcceptedAnswers = ambiguous.AllCorrectLetters;
-            exercise.AnswerToFullWord = new Dictionary<string, string>(ambiguous.LetterToFullWord);
+            exercise.AcceptedAnswers = new HashSet<string>(
+                wordsWithSameBlank.Select(w => w.CorrectLetter.Normalize()));
+            exercise.AnswerToFullWord = new Dictionary<string, string>();
+            foreach (var w in wordsWithSameBlank)
+                exercise.AnswerToFullWord.TryAdd(w.CorrectLetter.Normalize(), w.FullWord);
         }
         else
         {
-            exercise.AcceptedAnswers = [word.CorrectLetter];
-            exercise.AnswerToFullWord = new Dictionary<string, string> { { word.CorrectLetter, word.FullWord } };
+            var normalizedLetter = word.CorrectLetter.Normalize();
+            exercise.AcceptedAnswers = [normalizedLetter];
+            exercise.AnswerToFullWord = new Dictionary<string, string> { { normalizedLetter, word.FullWord } };
         }
 
         return exercise;
@@ -123,11 +142,11 @@ public class PairedConsonantsGenerator
     {
         if (_settings.ShowAllVariantsButtons && _settings.SelectedPairs.Count > 1)
         {
-            // Všechna písmena ze všech vybraných párů
+            // Všechna písmena ze všech vybraných párů (normalizace NFC pro konzistenci)
             var options = new HashSet<string>();
             foreach (var pair in _settings.SelectedPairs)
             {
-                var parts = pair.Split('_');
+                var parts = pair.Normalize().Split('_');
                 options.Add(parts[0].ToLower());
                 options.Add(parts[1].ToLower());
             }

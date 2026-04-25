@@ -25,6 +25,9 @@ public class DataSeeder
 
         // Párové souhlásky
         await SeedPairedConsonantsTrainingAsync(context);
+
+        // Smíšené poèítání do 100
+        await SeedMixedMathTrainingAsync(context);
     }
 
     private static async Task SeedInitialDataAsync(UcivoDbContext context)
@@ -154,7 +157,8 @@ public class DataSeeder
         {
             { "SMALL_MULTIPLICATION", "\u2716\uFE0F" }, // ??
             { "ADD_SUB_100",          "\u2795"  },       // ?
-            { "PAIRED_CONSONANTS",    "\U0001F524" }     // ??
+            { "PAIRED_CONSONANTS",    "\U0001F524" },    // ??
+            { "MIXED_MATH_100",       "\U0001F9EE" }     // ??
         };
 
         bool changed = false;
@@ -232,6 +236,32 @@ public class DataSeeder
         };
 
         context.TrainingTypes.Add(pairedConsonants);
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedMixedMathTrainingAsync(UcivoDbContext context)
+    {
+        if (await context.TrainingTypes.AnyAsync(t => t.Code == "MIXED_MATH_100"))
+            return;
+
+        var mathematics = await context.Subjects.FirstOrDefaultAsync(s => s.Code == "MATH");
+        if (mathematics == null) return;
+
+        var mixedMath = new TrainingType
+        {
+            SubjectId = mathematics.SubjectId,
+            Name = "Sm\u00ed\u0161en\u00e9 po\u010d\u00edt\u00e1n\u00ed do 100",
+            Code = "MIXED_MATH_100",
+            Description = "Kombinace s\u010d\u00edt\u00e1n\u00ed, od\u010d\u00edt\u00e1n\u00ed, n\u00e1soben\u00ed a d\u011blen\u00ed s prioritou operac\u00ed",
+            Icon = "\U0001F9EE",
+            GeneratorClassName = "TurboSkola.TrainingGenerators.MixedMathExerciseGenerator",
+            MinGradeNumber = 2,
+            MaxGradeNumber = 5,
+            DisplayOrder = 3,
+            IsActive = true
+        };
+
+        context.TrainingTypes.Add(mixedMath);
         await context.SaveChangesAsync();
     }
 }
