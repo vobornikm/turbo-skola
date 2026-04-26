@@ -44,8 +44,16 @@ public class AddSubExerciseGenerator
     private List<ExType> BuildTypePool()
     {
         var pool = new List<ExType>();
-        if (_settings.IncludeAddition) pool.Add(ExType.Addition);
-        if (_settings.IncludeSubtraction) pool.Add(ExType.Subtraction);
+
+        // Jednoduchá sčítání/odčítání (2 čísla) – přidáme pouze pokud:
+        //   a) režim "více čísel" není zapnutý, NEBO
+        //   b) je zapnutý a uživatel má v počtech vybranou dvojku
+        bool multipleOn = _settings.IncludeMultipleNumbers && _settings.MultipleNumbersCounts.Count > 0;
+        bool twoNumbersAllowed = !multipleOn || _settings.MultipleNumbersCounts.Contains(2);
+
+        if (_settings.IncludeAddition && twoNumbersAllowed) pool.Add(ExType.Addition);
+        if (_settings.IncludeSubtraction && twoNumbersAllowed) pool.Add(ExType.Subtraction);
+
         bool both = _settings.IncludeAddition && _settings.IncludeSubtraction;
         if (both && _settings.IncludeParentheses) pool.Add(ExType.Parentheses);
         if (both && _settings.IncludeMultipleNumbers) pool.Add(ExType.MultipleNumbers);
@@ -259,7 +267,7 @@ public class AddSubExerciseGenerator
 
     private Exercise? TryGenerateMultipleNumbers()
     {
-        var counts = _settings.MultipleNumbersCounts;
+        var counts = _settings.MultipleNumbersCounts.Where(n => n >= 3).ToList();
         if (counts.Count == 0) counts = [3, 4, 5, 6];
 
         for (int attempt = 0; attempt < 80; attempt++)

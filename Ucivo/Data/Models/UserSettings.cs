@@ -12,6 +12,7 @@ public class UserSettings
     public string? AddSubSettingsJson { get; set; }
     public string? PairedConsonantsSettingsJson { get; set; }
     public string? MixedMathSettingsJson { get; set; }
+    public string? MultiplyDivideBy2SettingsJson { get; set; }
     public DateTime LastModified { get; set; }
 
     // Relationships

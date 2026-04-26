@@ -42,6 +42,11 @@
 
     public async ValueTask DisposeAsync()
     {
-        await JSRuntime.InvokeVoidAsync("trainingLayout.destroy");
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("trainingLayout.destroy");
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
     }
 }

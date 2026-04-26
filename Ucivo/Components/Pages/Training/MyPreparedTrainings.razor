@@ -299,6 +299,12 @@
                 Navigation.NavigateTo("/training/mixedmath/session");
                 break;
 
+            case "MULTIPLY_DIVIDE_2":
+                var mul2Settings = JsonSerializer.Deserialize<MultiplyDivideBy2Settings>(training.SettingsJson);
+                if (mul2Settings != null) SessionService.SetCurrentMultiplyDivideBy2Settings(mul2Settings);
+                Navigation.NavigateTo("/training/multiply-divide-2/session");
+                break;
+
             default:
                 Navigation.NavigateTo("/training");
                 break;
@@ -339,6 +345,7 @@
         "ADD_SUB_100" => "➕",
         "PAIRED_CONSONANTS" => "🔤",
         "MIXED_MATH_100" => "🧮",
+        "MULTIPLY_DIVIDE_2" => "2️⃣",
         _ => "📝"
     };
 
@@ -348,6 +355,7 @@
         "ADD_SUB_100" => "Sčítání a odčítání do 100",
         "PAIRED_CONSONANTS" => "Párové souhlásky",
         "MIXED_MATH_100" => "Smíšené počítání do 100",
+        "MULTIPLY_DIVIDE_2" => "Násobení a dělení 2",
         _ => "Trénink"
     };
 

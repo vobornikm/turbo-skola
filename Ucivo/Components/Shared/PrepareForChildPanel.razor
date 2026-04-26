@@ -4,6 +4,7 @@
 @inject IPreparedTrainingService PreparedTrainingService
 @inject IProfileService ProfileService
 @inject IAuthService AuthService
+@inject NavigationManager Navigation
 
 @if (ProfileService.IsCurrentProfileParent && AuthService.IsAuthenticated)
 {
@@ -160,6 +161,9 @@
     [Parameter]
     public bool IsValid { get; set; }
 
+    [Parameter]
+    public EventCallback OnSettingsSaved { get; set; }
+
     private bool showPanel = false;
     private List<UserProfile>? childProfiles;
     private int? selectedChildId;
@@ -223,18 +227,19 @@
                 recurringDays: isRecurring ? recurringDays : 0,
                 note: string.IsNullOrWhiteSpace(note) ? null : note);
 
-            showSuccess = true;
-            StateHasChanged();
+            // Uložit nastavení přes callback (setup stránka si to uloží do DB)
+            if (OnSettingsSaved.HasDelegate)
+                await OnSettingsSaved.InvokeAsync();
 
-            await Task.Delay(3000);
-            showSuccess = false;
-            showPanel = false;
-
-            // Reset
+            // Reset a přejít na přehled tréninků s potvrzovací hláškou
             repeatCount = 1;
             isRecurring = false;
             recurringDays = 7;
             note = null;
+            showPanel = false;
+
+            var childName = Uri.EscapeDataString(selectedChildName ?? "dítě");
+            Navigation.NavigateTo($"/training?prepared=ok&child={childName}");
         }
         finally
         {
@@ -261,6 +266,7 @@
 <style>
     .prepare-section {
         margin-top: 1rem;
+        padding: 0 2rem 2rem;
     }
 
     .btn-prepare {

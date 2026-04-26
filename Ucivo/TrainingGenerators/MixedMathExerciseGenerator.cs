@@ -498,7 +498,7 @@ public class MixedMathExerciseGenerator
             }
 
             // Průběžné součty pro + a −
-            if (opers2.Count >= 2) // scratch jen pokud zbývají aspoň 2 kroky
+            if (opers2.Count >= 1)
             {
                 int running = nums2[0];
                 for (int i = 0; i < opers2.Count; i++)
@@ -512,20 +512,19 @@ public class MixedMathExerciseGenerator
         }
 
         // --- 3) Sestavíme segmenty ---
+        // Scratch pro × a ÷ → na operátorový segment (nad znaménkem)
+        // Scratch pro + a − → na číselný segment (nad druhým číslem)
         var segments = new List<ExerciseSegment>();
         segments.Add(new ExerciseSegment { Text = numbers[0].ToString() });
 
         for (int i = 0; i < ops.Count; i++)
         {
-            segments.Add(new ExerciseSegment { Text = $" {ops[i]} " });
+            bool isMulDiv = ops[i] is '×' or '÷';
+            int? opScratch = (isMulDiv && mulDivScratch.TryGetValue(i, out int mdVal)) ? mdVal : null;
+            int? numScratch = (!isMulDiv && addSubScratch.TryGetValue(i, out int asVal)) ? asVal : null;
 
-            int? scratch = null;
-            if (mulDivScratch.TryGetValue(i, out int mdVal))
-                scratch = mdVal;
-            else if (addSubScratch.TryGetValue(i, out int asVal))
-                scratch = asVal;
-
-            segments.Add(new ExerciseSegment { Text = numbers[i + 1].ToString(), ScratchValue = scratch });
+            segments.Add(new ExerciseSegment { Text = $" {ops[i]} ", ScratchValue = opScratch });
+            segments.Add(new ExerciseSegment { Text = numbers[i + 1].ToString(), ScratchValue = numScratch });
         }
 
         return segments;
@@ -533,29 +532,117 @@ public class MixedMathExerciseGenerator
 
     private static List<ExerciseSegment> BuildParenSegments(List<int> numbers, List<char> ops, int parenPos, int parenResult)
     {
+        // Sestavíme flatový výraz se závorkou nahrazenou jejím výsledkem.
+        // Tím dostaneme seznam čísel a operátorů, na který aplikujeme stejnou scratch logiku jako BuildFlatSegments.
+        //
+        // parenPos=0: numbers=[a,b,n2,n3], ops=[innerOp,outerOp,op2,op3]
+        //   → flat: [parenResult, n2, n3],  flatOps=[outerOp, op2, op3]
+        //   → opIndexMap[flatOpIdx] = ops index pro scratch lookup: flatOp[0]=ops[1], flatOp[1]=ops[2]...
+        //
+        // parenPos=1: numbers=[n0,a,b,n3,n4], ops=[outerOp,innerOp,op3,op4]
+        //   → flat: [n0, parenResult, n3, n4],  flatOps=[outerOp, op3, op4]
+        //   → flatOp[0]=ops[0], flatOp[1]=ops[2], flatOp[2]=ops[3]...
+
+        // 1) Sestavíme flat + mapování flatOpIdx → původní index v ops[]
+        var flatNums = new List<int>();
+        var flatOps = new List<char>();
+        var flatOpToOrigOp = new Dictionary<int, int>(); // flatOpIdx → ops[]
+
+        if (parenPos == 0)
+        {
+            flatNums.Add(parenResult);
+            for (int i = 2; i < numbers.Count; i++) flatNums.Add(numbers[i]);
+            for (int i = 1; i < ops.Count; i++)
+            {
+                flatOpToOrigOp[flatOps.Count] = i;
+                flatOps.Add(ops[i]);
+            }
+        }
+        else // parenPos == 1
+        {
+            flatNums.Add(numbers[0]);
+            flatNums.Add(parenResult);
+            for (int i = parenPos + 2; i < numbers.Count; i++) flatNums.Add(numbers[i]);
+            flatOpToOrigOp[0] = 0;
+            flatOps.Add(ops[0]);
+            for (int i = parenPos + 1; i < ops.Count; i++)
+            {
+                flatOpToOrigOp[flatOps.Count] = i;
+                flatOps.Add(ops[i]);
+            }
+        }
+
+        // 2) Vypočítáme scratch pomocí stejné priority logiky jako BuildFlatSegments
+        // flatScratch[flatOpIdx] → scratch hodnota (pro × ÷ nad operátor, pro + - nad číslo)
+        var flatScratchOnOp = new Dictionary<int, int>();  // mulDiv scratch → nad operátor
+        var flatScratchOnNum = new Dictionary<int, int>(); // addSub scratch → nad číslo
+        {
+            var ns = new List<int>(flatNums);
+            var os = new List<char>(flatOps);
+            var origIdx = Enumerable.Range(0, flatOps.Count).ToList();
+
+            for (int i = 0; i < os.Count;)
+            {
+                if (os[i] is '×' or '÷')
+                {
+                    int val = os[i] == '×' ? ns[i] * ns[i + 1] : ns[i] / ns[i + 1];
+                    flatScratchOnOp[origIdx[i]] = val;
+                    ns[i] = val;
+                    ns.RemoveAt(i + 1);
+                    os.RemoveAt(i);
+                    origIdx.RemoveAt(i);
+                }
+                else i++;
+            }
+
+            if (os.Count >= 1)
+            {
+                int running = ns[0];
+                for (int i = 0; i < os.Count; i++)
+                {
+                    running = os[i] == '+' ? running + ns[i + 1] : running - ns[i + 1];
+                    if (i < os.Count - 1)
+                        flatScratchOnNum[origIdx[i]] = running;
+                }
+            }
+        }
+
+        // 3) Sestavíme segmenty
         var segments = new List<ExerciseSegment>();
 
-        for (int i = 0; i < numbers.Count; i++)
-        {
-            if (i > 0 && i != parenPos + 1)
-                segments.Add(new ExerciseSegment { Text = $" {ops[i - 1]} " });
+        // Pokud je číslo před závorkou (parenPos==1), přidáme ho jako první segment
+        if (parenPos == 1)
+            segments.Add(new ExerciseSegment { Text = numbers[0].ToString() });
 
-            if (i == parenPos)
-            {
-                segments.Add(new ExerciseSegment
-                {
-                    Text = $"({numbers[i]} {ops[i]} {numbers[i + 1]})",
-                    ScratchValue = parenResult
-                });
-            }
-            else if (i == parenPos + 1)
-            {
-                continue;
-            }
-            else
-            {
-                segments.Add(new ExerciseSegment { Text = numbers[i].ToString() });
-            }
+        // Závorka
+        int flatIdxForParen = parenPos == 0 ? -1 : 0; // flatOps[0] = outerOp před závorkou (parenPos==1)
+        if (parenPos == 1)
+        {
+            // Operátor před závorkou (ops[0] = outerOp)
+            bool isMulDiv = flatOps[0] is '×' or '÷';
+            int? opScratch = (isMulDiv && flatScratchOnOp.TryGetValue(0, out int v1)) ? v1 : null;
+            segments.Add(new ExerciseSegment { Text = $" {ops[0]} ", ScratchValue = opScratch });
+        }
+        segments.Add(new ExerciseSegment
+        {
+            Text = $"({numbers[parenPos]} {ops[parenPos]} {numbers[parenPos + 1]})",
+            ScratchValue = parenResult
+        });
+
+        // Segmenty za závorkou
+        // Pro parenPos=0: flatOps[0]=ops[1], flatOps[1]=ops[2]...  čísla: numbers[2], numbers[3]...
+        // Pro parenPos=1: flatOps[1]=ops[2], flatOps[2]=ops[3]...  čísla: numbers[3], numbers[4]...
+        int firstExtraNum = parenPos == 0 ? 2 : parenPos + 2;
+        int firstFlatOpIdx = parenPos == 0 ? 0 : 1;
+
+        for (int k = firstExtraNum; k < numbers.Count; k++)
+        {
+            int fIdx = firstFlatOpIdx + (k - firstExtraNum);
+            bool isMulDiv = flatOps[fIdx] is '×' or '÷';
+            int? opScratch  = (isMulDiv  && flatScratchOnOp .TryGetValue(fIdx, out int v1)) ? v1 : null;
+            int? numScratch = (!isMulDiv && flatScratchOnNum.TryGetValue(fIdx, out int v2)) ? v2 : null;
+            segments.Add(new ExerciseSegment { Text = $" {flatOps[fIdx]} ", ScratchValue = opScratch });
+            segments.Add(new ExerciseSegment { Text = numbers[k].ToString(), ScratchValue = numScratch });
         }
 
         return segments;

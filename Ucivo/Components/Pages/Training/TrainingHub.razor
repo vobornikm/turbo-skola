@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using TurboSkola.Services
 @using TurboSkola.Data.Models
+@using Microsoft.AspNetCore.WebUtilities
 @inject ITrainingService TrainingService
 @inject IPreparedTrainingService PreparedTrainingService
 @inject IProfileService ProfileService
@@ -11,6 +12,15 @@
 <PageTitle>Tréninky - Turbo Škola</PageTitle>
 
 <div class="hub-container">
+    @if (successToast != null)
+    {
+        <div class="hub-toast hub-toast-success">
+            <span class="hub-toast-icon">🎉</span>
+            <span>@successToast</span>
+            <button class="hub-toast-close" @onclick="() => successToast = null">✕</button>
+        </div>
+    }
+
     <div class="hub-header">
         <h1>🚀 Vyber si trénink</h1>
         <p class="hub-subtitle">Procvičuj různé předměty a posouvej se dál</p>
@@ -68,7 +78,7 @@
                             <div class="training-card-body">
                                 <h3>@training.Name</h3>
                                 <p>@training.Description</p>
-                                <span class="training-grade">@training.MinGradeNumber.–@training.MaxGradeNumber. třída</span>
+                                <span class="training-grade">@(training.MinGradeNumber == training.MaxGradeNumber ? $"{training.MinGradeNumber}. třída" : $"{training.MinGradeNumber}.–{training.MaxGradeNumber}. třída")</span>
                             </div>
                             <div class="training-card-arrow">›</div>
                         </div>
@@ -82,9 +92,19 @@
 @code {
     private List<(Subject Subject, List<TrainingType> Trainings)>? groupedTrainings;
     private int pendingCount = 0;
+    private string? successToast;
 
     protected override async Task OnInitializedAsync()
     {
+        var uri = new Uri(Navigation.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("prepared", out var prepared) && prepared == "ok")
+        {
+            var child = query.TryGetValue("child", out var c) ? c.ToString() : "dítě";
+            successToast = $"Trénink byl úspěšně připraven pro {child}! 📋";
+            Navigation.NavigateTo("/training", replace: true);
+        }
+
         var types = await TrainingService.GetTrainingTypesAsync();
         groupedTrainings = types
             .GroupBy(t => t.Subject.SubjectId)
@@ -107,6 +127,7 @@
             "ADD_SUB_100" => "/training/addsub/setup",
             "MIXED_MATH_100" => "/training/mixedmath/setup",
             "PAIRED_CONSONANTS" => "/training/czech/paired-consonants/setup",
+            "MULTIPLY_DIVIDE_2" => "/training/multiply-divide-2/setup",
             _ => "/training"
         };
         Navigation.NavigateTo(url);
@@ -137,11 +158,20 @@
         "ADD_SUB_100"          => "\u2795",        // ➕
         "MIXED_MATH_100"       => "\U0001F9EE",    // 🧮
         "PAIRED_CONSONANTS"    => "\U0001F524",    // 🔤
+        "MULTIPLY_DIVIDE_2"    => "\u0032\uFE0F\u20E3", // 2️⃣
         _                      => "\U0001F4DD"      // 📝
     };
 }
 
 <style>
+    /* Toast notifikace */
+    .hub-toast { display: flex; align-items: center; gap: 0.75rem; padding: 0.9rem 1.1rem; border-radius: 12px; margin-bottom: 1.25rem; font-size: 0.97rem; font-weight: 500; animation: toastIn 0.3s ease; }
+    .hub-toast-success { background: #f0fff4; border: 1.5px solid #68d391; color: #276749; }
+    .hub-toast-icon { font-size: 1.3rem; flex-shrink: 0; }
+    .hub-toast-close { margin-left: auto; background: none; border: none; cursor: pointer; font-size: 1rem; color: #68d391; padding: 0 0.25rem; line-height: 1; }
+    .hub-toast-close:hover { color: #276749; }
+    @@keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
     .hub-container {
         max-width: 800px;
         margin: 0 auto;

@@ -67,6 +67,15 @@ public class MixedMathTrainingSettings
     public bool EnableReadAloud { get; set; } = false;
 }
 
+public class MultiplyDivideBy2Settings
+{
+    public string DurationType { get; set; } = "Time";
+    public int DurationValue { get; set; } = 5;
+    public bool IncludeMultiplication { get; set; } = true;
+    public bool IncludeDivision { get; set; } = true;
+    public bool EnableExtendedHint { get; set; } = false;
+}
+
 public class PairedConsonantsTrainingSettings
 {
     public string DurationType { get; set; } = "Time";
@@ -98,6 +107,8 @@ public interface ISettingsService
     Task SavePairedConsonantsSettingsAsync(int profileId, PairedConsonantsTrainingSettings settings);
     Task<MixedMathTrainingSettings> GetMixedMathSettingsAsync(int? profileId);
     Task SaveMixedMathSettingsAsync(int profileId, MixedMathTrainingSettings settings);
+    Task<MultiplyDivideBy2Settings> GetMultiplyDivideBy2SettingsAsync(int? profileId);
+    Task SaveMultiplyDivideBy2SettingsAsync(int profileId, MultiplyDivideBy2Settings settings);
 }
 
 public class SettingsService : ISettingsService
@@ -240,6 +251,36 @@ public class SettingsService : ISettingsService
         }
 
         userSettings.MixedMathSettingsJson = JsonSerializer.Serialize(settings);
+        userSettings.LastModified = DateTime.UtcNow;
+
+        _dbContext.UserSettings.Update(userSettings);
+        await _dbContext.SaveChangesAsync();
+    }
+
+    public async Task<MultiplyDivideBy2Settings> GetMultiplyDivideBy2SettingsAsync(int? profileId)
+    {
+        if (!profileId.HasValue)
+            return new MultiplyDivideBy2Settings();
+
+        var userSettings = await _dbContext.UserSettings.FirstOrDefaultAsync(s => s.ProfileId == profileId);
+
+        if (userSettings?.MultiplyDivideBy2SettingsJson == null)
+            return new MultiplyDivideBy2Settings();
+
+        return JsonSerializer.Deserialize<MultiplyDivideBy2Settings>(userSettings.MultiplyDivideBy2SettingsJson)
+               ?? new MultiplyDivideBy2Settings();
+    }
+
+    public async Task SaveMultiplyDivideBy2SettingsAsync(int profileId, MultiplyDivideBy2Settings settings)
+    {
+        var userSettings = await _dbContext.UserSettings.FirstOrDefaultAsync(s => s.ProfileId == profileId);
+        if (userSettings == null)
+        {
+            userSettings = new UserSettings { ProfileId = profileId };
+            _dbContext.UserSettings.Add(userSettings);
+        }
+
+        userSettings.MultiplyDivideBy2SettingsJson = JsonSerializer.Serialize(settings);
         userSettings.LastModified = DateTime.UtcNow;
 
         _dbContext.UserSettings.Update(userSettings);

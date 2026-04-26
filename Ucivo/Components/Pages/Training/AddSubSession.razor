@@ -135,13 +135,6 @@
                 }
             </div>
 
-            @if (enableReadAloud)
-            {
-                <button class="btn-speak" @onclick="SpeakCurrentExercise" title="Přečíst nahlas">
-                    &#x1F50A;
-                </button>
-            }
-
             @if (!exercises[currentExerciseIndex].IsCorrect)
             {
                 <div class="input-container">
@@ -284,15 +277,11 @@
     private Dictionary<int, string> scratchValues = new();  // segmentIndex → user input
     private bool showScratchValidation = false;             // true po špatné odpovědi
 
-    // Text-to-Speech
-    private bool enableReadAloud = false;
-
     protected override async Task OnInitializedAsync()
     {
         var settings = SessionService.GetCurrentAddSubSettings() ?? new AddSubTrainingSettings();
         currentSettings = settings;
         durationType = settings.DurationType;
-        enableReadAloud = settings.EnableReadAloud;
         _generator = new AddSubExerciseGenerator(settings);
 
         if (settings.DurationType == "Time")
@@ -319,7 +308,6 @@
     }
 
     private int _lastFocusedExerciseIndex = -1;
-    private int _lastSpokenExerciseIndex = -1;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -333,14 +321,8 @@
             if (!firstRender) await Task.Delay(50);
             await answerInput.FocusAsync();
 
-            // Auto-read nový příklad
-            if (enableReadAloud && currentExerciseIndex != _lastSpokenExerciseIndex)
-            {
-                _lastSpokenExerciseIndex = currentExerciseIndex;
-                await SpeakExerciseAsync(exercises[currentExerciseIndex].Exercise.DisplayText);
+                }
             }
-        }
-    }
 
     private void GenerateExercisesForTime()
     {
@@ -822,28 +804,6 @@
     }
 
     // ============================================================
-    // TEXT-TO-SPEECH
-    // ============================================================
-
-    private async Task SpeakCurrentExercise()
-    {
-        if (currentExerciseIndex >= exercises.Count) return;
-        await SpeakExerciseAsync(exercises[currentExerciseIndex].Exercise.DisplayText);
-    }
-
-    private async Task SpeakExerciseAsync(string displayText)
-    {
-        try
-        {
-            var spokenText = MathSpeechHelper.ToSpokenCzech(displayText);
-            await JSRuntime.InvokeVoidAsync("speechHelper.speak", spokenText, "cs-CZ");
-        }
-        catch
-        {
-            // Speech API nemusí být dostupné – ignorujeme
-        }
-    }
-
     private string GetExerciseFontSize()
     {
         if (currentExerciseIndex >= exercises.Count) return "clamp(2.5rem, 12vw, 5rem)";
@@ -948,31 +908,7 @@
         min-height: clamp(3.2rem, 15vw, 6.5rem);
     }
 
-    .btn-speak {
-        background: rgba(255, 255, 255, 0.15);
-        color: rgba(255, 255, 255, 0.85);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 50%;
-        width: 2.4rem;
-        height: 2.4rem;
-        font-size: 1.1rem;
-        cursor: pointer;
-        transition: all 0.15s;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 0.3rem;
-    }
 
-    .btn-speak:hover {
-        background: rgba(255, 255, 255, 0.25);
-        transform: scale(1.1);
-    }
-
-    .btn-speak:active {
-        transform: scale(0.95);
-    }
 
     .exercise-text {
         font-weight: bold;

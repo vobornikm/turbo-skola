@@ -224,7 +224,7 @@
                         <div class="chip-selector">
                             <span class="chip-label">Počet čísel ve výpočtu:</span>
                             <div class="chip-row">
-                                @foreach (var n in new[] { 3, 4, 5, 6, 7, 8 })
+                                @foreach (var n in new[] { 2, 3, 4, 5, 6, 7, 8 })
                                 {
                                     var isSelected = settings.MultipleNumbersCounts.Contains(n);
                                     <button class="chip @(isSelected ? "chip-active" : "")"
@@ -261,39 +261,38 @@
             </div>
         }
 
-        <!-- PŘÍSTUPNOST -->
-        <div class="form-section op-section accessibility-section">
-            <h3>🔊 Přístupnost</h3>
-            <div class="toggles-container">
-                <div class="toggle-item" @onclick="() => { settings.EnableReadAloud = !settings.EnableReadAloud; StateHasChanged(); }">
-                    <div class="toggle-label">
-                        <span class="toggle-icon">🗣️</span>
-                        <div>
-                            <div>Číst příklady nahlas</div>
-                            <div class="toggle-hint">Každý nový příklad se automaticky přečte</div>
-                        </div>
-                    </div>
-                    <div class="toggle-switch @(settings.EnableReadAloud ? "on" : "off")">
-                        <div class="toggle-knob"></div>
-                    </div>
-                </div>
+
+        <!-- TLAČÍTKO START / PŘIPRAVIT PRO DÍTĚ -->
+        @if (ProfileService.IsCurrentProfileParent)
+        {
+            <PrepareForChildPanel TrainingTypeCode="ADD_SUB_100"
+                                  SettingsJson="@GetSettingsJson()"
+                                  IsValid="@IsValid()"
+                                  OnSettingsSaved="SaveSettings" />
+            <div class="start-section start-section-secondary">
+                <button class="btn-start-secondary @(IsValid() ? "" : "disabled")"
+                        @onclick="StartTraining"
+                        disabled="@(!IsValid())">
+                    <span>🚀</span>
+                    <span>Spustit sám/sama</span>
+                </button>
             </div>
-        </div>
-
-        <!-- TLAČÍTKO START -->
-        <div class="start-section">
-            <button class="btn-start-modern @(IsValid() ? "" : "disabled")"
-                    @onclick="StartTraining"
-                    disabled="@(!IsValid())">
-                <span class="btn-icon">🚀</span>
-                <span class="btn-text">Spustit trénink</span>
-            </button>
-        </div>
-
-        <!-- PŘIPRAVIT PRO DÍTĚ -->
-        <PrepareForChildPanel TrainingTypeCode="ADD_SUB_100"
-                              SettingsJson="@GetSettingsJson()"
-                              IsValid="@IsValid()" />
+        }
+        else
+        {
+            <div class="start-section">
+                <button class="btn-start-modern @(IsValid() ? "" : "disabled")"
+                        @onclick="StartTraining"
+                        disabled="@(!IsValid())">
+                    <span class="btn-icon">🚀</span>
+                    <span class="btn-text">Spustit trénink</span>
+                </button>
+            </div>
+            <PrepareForChildPanel TrainingTypeCode="ADD_SUB_100"
+                                  SettingsJson="@GetSettingsJson()"
+                                  IsValid="@IsValid()"
+                                  OnSettingsSaved="SaveSettings" />
+        }
 
     </div>
 </div>
@@ -389,6 +388,12 @@
     }
 
     private string GetSettingsJson() => JsonSerializer.Serialize(settings);
+
+    private async Task SaveSettings()
+    {
+        if (AuthService?.IsAuthenticated == true && ProfileService.CurrentProfileId.HasValue)
+            await SettingsService.SaveAddSubSettingsAsync(ProfileService.CurrentProfileId.Value, settings);
+    }
 }
 
 <style>
@@ -732,6 +737,11 @@
         transform: none;
         box-shadow: none;
     }
+
+    .start-section-secondary { padding-top: 0; }
+    .btn-start-secondary { width: 100%; padding: 0.85rem; border: 1.5px solid #cbd5e0; border-radius: 12px; background: white; color: #718096; font-size: 0.97rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.6rem; transition: border-color 0.2s, color 0.2s; }
+    .btn-start-secondary:hover:not(.disabled) { border-color: #667eea; color: #667eea; }
+    .btn-start-secondary.disabled { opacity: 0.4; cursor: not-allowed; }
 
     .btn-icon {
         font-size: 1.5rem;

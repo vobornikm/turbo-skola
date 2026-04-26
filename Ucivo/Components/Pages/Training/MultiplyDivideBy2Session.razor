@@ -1,4 +1,4 @@
-@page "/training/mixedmath/session"
+@page "/training/multiply-divide-2/session"
 @layout TrainingLayout
 @rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using TurboSkola.Services
@@ -14,7 +14,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
 
-<PageTitle>Trénink - Smíšené počítání</PageTitle>
+<PageTitle>Trénink - Násobení a dělení 2</PageTitle>
 
 <LoadingSpinner IsLoading="@isSaving" Message="Ukládám výsledky..." />
 
@@ -83,59 +83,119 @@
                     var currentEx = exercises[currentExerciseIndex];
                     var ex = currentEx.Exercise;
                 }
-                @if (ex.Segments.Count > 0)
-                {
-                    <div class="exercise-structured" @key="currentExerciseIndex" style="font-size: @GetExerciseFontSize()">
-                        @for (int si = 0; si < ex.Segments.Count; si++)
-                        {
-                            var seg = ex.Segments[si];
-                            var idx = si;
-                            var isOp = seg.Text.Trim() is "+" or "-" or "×" or "÷";
-                            @if (seg.ScratchValue.HasValue && currentSettings?.EnableScratchWork == true)
-                            {
-                                <span class="segment @(isOp ? "segment-op" : "") has-scratch">
-                                    <input type="number" inputmode="numeric"
-                                           class="scratch-input @GetScratchClass(idx)"
-                                           placeholder="?"
-                                           value="@GetScratchValue(idx)"
-                                           @oninput="@(e => OnScratchInput(idx, e))"
-                                           tabindex="@(idx + 1)" />
-                                    <span class="segment-text">@seg.Text</span>
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="segment @(isOp ? "segment-op" : "")">
-                                    <span class="segment-text">@seg.Text</span>
-                                </span>
-                            }
-                        }
-                        <span class="segment segment-op"><span class="segment-text"> =</span></span>
-                    </div>
-                }
-                else
-                {
-                    <div class="exercise-text" @key="currentExerciseIndex" style="font-size: @GetExerciseFontSize()">
-                        @ex.DisplayText
-                    </div>
-                }
+                <div class="exercise-text" @key="currentExerciseIndex" style="font-size: @GetExerciseFontSize()">
+                    @ex.DisplayText
+                </div>
             </div>
 
             @if (!currentEx.IsCorrect)
             {
+                <!-- Rozšířená nápověda – vždy dostupná pokud je zapnuta -->
+                @if (enableExtendedHint)
+                {
+                    <button class="btn-hint-extended" @onclick="ToggleExtendedHint">
+                        💡 @(showExtendedHint ? "Skrýt nápovědu" : "Zobrazit nápovědu")
+                    </button>
+
+                    @if (showExtendedHint && currentHint != null)
+                    {
+                        <div class="hint-panel">
+                            @if (currentHint.IsMultiplication)
+                            {
+                                <div class="hint-title">💡 Jak počítat: @ex.DisplayText</div>
+                                <div class="hint-body">
+                                    <p>Sečti číslo samo se sebou:</p>
+                                    <div class="hint-formula">
+                                        <span class="hint-num">@currentHint.OriginalNumber</span>
+                                        <span class="hint-op">+</span>
+                                        <span class="hint-num">@currentHint.OriginalNumber</span>
+                                        <span class="hint-op">=</span>
+                                        <span class="hint-result-box" @onclick="FillHintResult">@(hintResultRevealed ? currentHint.AdditionResult.ToString() : "?")</span>
+                                    </div>
+                                    @if (!hintResultRevealed)
+                                    {
+                                        <p class="hint-click-tip">Klikni na <strong>?</strong> pro zobrazení výsledku</p>
+                                    }
+                                </div>
+                            }
+                            else if (currentHint.UseDecomposition)
+                            {
+                                <div class="hint-title">💡 Jak počítat: @ex.DisplayText</div>
+                                <div class="hint-body">
+                                    <p>Rozlož číslo na části a každou vyděl zvlášť:</p>
+                                    <div class="hint-decomp">
+                                        <div class="hint-decomp-row">
+                                            <span class="hint-decomp-label">@currentHint.BigPart ÷ 2 =</span>
+                                            <input type="number" inputmode="numeric" class="hint-input @GetHintInputClass(0)"
+                                                   placeholder="?"
+                                                   @bind="hintInput1"
+                                                   @bind:event="oninput"
+                                                   @onkeydown="OnHintInputKeyDown" />
+                                            <span class="hint-reveal-btn" @onclick="() => RevealHintPart(0)">👁️</span>
+                                        </div>
+                                        <div class="hint-decomp-row">
+                                            <span class="hint-decomp-label">@currentHint.SmallPart ÷ 2 =</span>
+                                            <input type="number" inputmode="numeric" class="hint-input @GetHintInputClass(1)"
+                                                   placeholder="?"
+                                                   @bind="hintInput2"
+                                                   @bind:event="oninput"
+                                                   @onkeydown="OnHintInputKeyDown" />
+                                            <span class="hint-reveal-btn" @onclick="() => RevealHintPart(1)">👁️</span>
+                                        </div>
+                                        <div class="hint-decomp-sum">
+                                            <span>Výsledek: </span>
+                                            <span class="hint-num">@(GetHintPart1Display())</span>
+                                            <span class="hint-op">+</span>
+                                            <span class="hint-num">@(GetHintPart2Display())</span>
+                                            <span class="hint-op">=</span>
+                                            <span class="hint-result-box @(hintResultRevealed ? "revealed" : "")" @onclick="FillHintResult">
+                                                @(hintResultRevealed ? currentHint.DirectResult.ToString() : "?")
+                                            </span>
+                                        </div>
+                                        @if (!hintResultRevealed)
+                                        {
+                                            <p class="hint-click-tip">Klikni na <strong>?</strong> pro vyplnění výsledku do odpovědi</p>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="hint-title">💡 Nápověda</div>
+                                <div class="hint-body">
+                                    <p>@ex.DisplayText</p>
+                                    <div class="hint-formula">
+                                        <span class="hint-result-box" @onclick="FillHintResult">@(hintResultRevealed ? currentHint.DirectResult.ToString() : "?")</span>
+                                    </div>
+                                    @if (!hintResultRevealed)
+                                    {
+                                        <p class="hint-click-tip">Klikni na <strong>?</strong> pro zobrazení výsledku</p>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+
                 <div class="input-container">
                     @if (currentEx.Attempts > 0 && !currentEx.IsCorrect)
                     {
                         <div class="wrong-answer">
                             <span class="wrong-text">@currentEx.UserAnswer</span>
                             <span class="hint-text">Nevadí, zkus znovu</span>
-                            @if (currentEx.Attempts >= 2)
+                            @if (currentEx.Attempts >= 2 && !enableExtendedHint)
                             {
                                 <div class="hint-buttons">
                                     @if (currentEx.Attempts >= 3)
                                     {
                                         <button class="btn-giveup" @onclick="ShowGiveUpDialog">&#x1F3F3;&#xFE0F; Dám se podat</button>
                                     }
+                                </div>
+                            }
+                            @if (currentEx.Attempts >= 3 && enableExtendedHint)
+                            {
+                                <div class="hint-buttons">
+                                    <button class="btn-giveup" @onclick="ShowGiveUpDialog">&#x1F3F3;&#xFE0F; Dám se podat</button>
                                 </div>
                             }
                         </div>
@@ -240,19 +300,35 @@
     private bool showEndConfirm = false;
     private bool showSkipConfirm = false;
     private bool showGiveUpDialog = false;
-    private MixedMathTrainingSettings? currentSettings = null;
-    private MixedMathExerciseGenerator? _generator = null;
 
-    // Scratch work
-    private Dictionary<int, string> scratchValues = new();
-    private bool showScratchValidation = false;
+    // Rozšířená nápověda
+    private bool enableExtendedHint = false;
+    private bool showExtendedHint = false;
+    private MultiplyDivideHint? currentHint = null;
+    private bool hintResultRevealed = false;
+    private string hintInput1 = "";
+    private string hintInput2 = "";
+    private bool hintPart1Revealed = false;
+    private bool hintPart2Revealed = false;
+
+    private MultiplyDivideBy2Generator? _generator = null;
+    private int _lastFocusedExerciseIndex = -1;
 
     protected override async Task OnInitializedAsync()
     {
-        var settings = SessionService.GetCurrentMixedMathSettings() ?? new MixedMathTrainingSettings();
-        currentSettings = settings;
+        var settings = SessionService.GetCurrentMultiplyDivideBy2Settings() ?? new MultiplyDivideBy2Settings();
         durationType = settings.DurationType;
-        _generator = new MixedMathExerciseGenerator(settings);
+        enableExtendedHint = settings.EnableExtendedHint;
+
+        _generator = new MultiplyDivideBy2Generator();
+        _generator.Initialize(new ExerciseGeneratorConfig
+        {
+            CustomSettings = new Dictionary<string, object>
+            {
+                { "IncludeMultiplication", settings.IncludeMultiplication },
+                { "IncludeDivision", settings.IncludeDivision }
+            }
+        });
 
         if (settings.DurationType == "Time")
         {
@@ -269,15 +345,15 @@
             ProfileService.CurrentProfileId,
             durationSeconds,
             settings.DurationType == "Count" ? settings.DurationValue : null,
-            "MIXED_MATH_100"
+            "MULTIPLY_DIVIDE_2"
         )).SessionId;
+
+        PrepareHintForCurrent();
 
         stopwatch.Start();
         isSessionStarted = true;
         _ = UpdateTimer();
     }
-
-    private int _lastFocusedExerciseIndex = -1;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -299,7 +375,7 @@
         exercises = Enumerable.Range(0, count).Select((_, idx) => new SessionExerciseData
         {
             Index = idx,
-            Exercise = _generator.GenerateExercise(),
+            Exercise = _generator.GenerateExercise().Exercise,
             StartTime = DateTime.UtcNow
         }).ToList();
     }
@@ -313,11 +389,78 @@
             exercises.Add(new SessionExerciseData
             {
                 Index = startIndex + i,
-                Exercise = _generator.GenerateExercise(),
+                Exercise = _generator.GenerateExercise().Exercise,
                 StartTime = DateTime.UtcNow
             });
         }
     }
+
+    private void PrepareHintForCurrent()
+    {
+        if (!enableExtendedHint || currentExerciseIndex >= exercises.Count) return;
+        currentHint = MultiplyDivideBy2Generator.GetHint(exercises[currentExerciseIndex].Exercise);
+        showExtendedHint = false;
+        hintResultRevealed = false;
+        hintInput1 = "";
+        hintInput2 = "";
+        hintPart1Revealed = false;
+        hintPart2Revealed = false;
+    }
+
+    private void ToggleExtendedHint()
+    {
+        showExtendedHint = !showExtendedHint;
+        if (showExtendedHint && currentExerciseIndex < exercises.Count)
+            exercises[currentExerciseIndex].HintShown = true;
+        StateHasChanged();
+    }
+
+    private void FillHintResult()
+    {
+        if (currentHint == null) return;
+        hintResultRevealed = true;
+        int result = currentHint.IsMultiplication ? currentHint.AdditionResult : currentHint.DirectResult;
+        currentAnswer = result.ToString();
+        StateHasChanged();
+    }
+
+    private void RevealHintPart(int part)
+    {
+        if (currentHint == null) return;
+        if (part == 0) { hintPart1Revealed = true; hintInput1 = currentHint.BigPartResult.ToString(); }
+        else { hintPart2Revealed = true; hintInput2 = currentHint.SmallPartResult.ToString(); }
+        StateHasChanged();
+    }
+
+    private string GetHintInputClass(int part)
+    {
+        if (part == 0)
+        {
+            if (string.IsNullOrWhiteSpace(hintInput1)) return "";
+            if (int.TryParse(hintInput1, out int v) && v == currentHint?.BigPartResult) return "hint-correct";
+            return "hint-wrong";
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(hintInput2)) return "";
+            if (int.TryParse(hintInput2, out int v) && v == currentHint?.SmallPartResult) return "hint-correct";
+            return "hint-wrong";
+        }
+    }
+
+    private string GetHintPart1Display()
+    {
+        if (string.IsNullOrWhiteSpace(hintInput1)) return "?";
+        return hintInput1;
+    }
+
+    private string GetHintPart2Display()
+    {
+        if (string.IsNullOrWhiteSpace(hintInput2)) return "?";
+        return hintInput2;
+    }
+
+    private Task OnHintInputKeyDown(KeyboardEventArgs e) => Task.CompletedTask;
 
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
@@ -349,7 +492,6 @@
 
             currentExerciseIndex++;
             currentAnswer = "";
-            ResetScratchState();
 
             if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3)
                 GenerateMoreExercises();
@@ -357,6 +499,7 @@
             if (currentExerciseIndex < exercises.Count)
             {
                 exercises[currentExerciseIndex].StartTime = DateTime.UtcNow;
+                PrepareHintForCurrent();
                 StateHasChanged();
             }
             else
@@ -366,7 +509,6 @@
         {
             currentExercise.WrongAnswers.Add(answer);
             currentAnswer = "";
-            showScratchValidation = true;
             StateHasChanged();
             if (answerInput.Id != null)
                 await answerInput.FocusAsync();
@@ -430,7 +572,7 @@
             Navigation.NavigateTo("/training/prepared");
         }
         else
-            Navigation.NavigateTo("/training/mixedmath/setup");
+            Navigation.NavigateTo("/training/multiply-divide-2/setup");
     }
 
     private async Task UpdateTimer()
@@ -459,7 +601,7 @@
         cur.TimeSpentSeconds = (int)(DateTime.UtcNow - cur.StartTime).TotalSeconds;
         currentExerciseIndex++;
         currentAnswer = "";
-        ResetScratchState();
+        PrepareHintForCurrent();
         if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3) GenerateMoreExercises();
         if (currentExerciseIndex < exercises.Count) { exercises[currentExerciseIndex].StartTime = DateTime.UtcNow; StateHasChanged(); }
         else await CompleteSessionAsync();
@@ -476,29 +618,11 @@
         cur.GaveUp = true;
         currentExerciseIndex++;
         currentAnswer = "";
-        ResetScratchState();
+        PrepareHintForCurrent();
         if (durationType == "Time" && currentExerciseIndex >= exercises.Count - 3) GenerateMoreExercises();
         if (currentExerciseIndex < exercises.Count) { exercises[currentExerciseIndex].StartTime = DateTime.UtcNow; StateHasChanged(); }
         else await CompleteSessionAsync();
     }
-
-    // Scratch work
-    private string GetScratchValue(int idx) => scratchValues.TryGetValue(idx, out var v) ? v : "";
-    private void OnScratchInput(int idx, ChangeEventArgs e) => scratchValues[idx] = e.Value?.ToString() ?? "";
-
-    private string GetScratchClass(int segmentIndex)
-    {
-        if (!showScratchValidation) return "";
-        if (!scratchValues.TryGetValue(segmentIndex, out var val) || string.IsNullOrWhiteSpace(val)) return "";
-        if (currentExerciseIndex >= exercises.Count) return "";
-        var segments = exercises[currentExerciseIndex].Exercise.Segments;
-        if (segmentIndex >= segments.Count) return "";
-        var expected = segments[segmentIndex].ScratchValue;
-        if (!expected.HasValue) return "";
-        return int.TryParse(val, out int parsed) && parsed == expected.Value ? "scratch-correct" : "scratch-wrong";
-    }
-
-    private void ResetScratchState() { scratchValues.Clear(); showScratchValidation = false; }
 
     private string GetExerciseFontSize()
     {
@@ -508,23 +632,15 @@
         {
             <= 9  => "clamp(2.5rem, 12vw, 5rem)",
             <= 13 => "clamp(2rem, 9vw, 4rem)",
-            <= 17 => "clamp(1.6rem, 7vw, 3.2rem)",
-            _     => "clamp(1.3rem, 5.5vw, 2.6rem)"
+            _     => "clamp(1.6rem, 7vw, 3.2rem)"
         };
     }
-
-    private static string PrikladText(int n) => n switch
-    {
-        1 => "příklad",
-        >= 2 and <= 4 => "příklady",
-        _ => "příkladů"
-    };
 }
 
 <style>
     .training-session-container { position: fixed; top: 0; left: 0; width: 100%; height: var(--training-vh, 100%); display: flex; flex-direction: column; align-items: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 0.75rem 1rem; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow: hidden; }
     .loading { color: white; font-size: 1.2rem; }
-    .exercise-area { width: 100%; max-width: 500px; height: 100%; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+    .exercise-area { width: 100%; max-width: 500px; height: 100%; display: flex; flex-direction: column; align-items: center; overflow-y: auto; }
     .btn-details { background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.4); padding: 0.35rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; align-self: flex-start; flex-shrink: 0; }
     .btn-details:hover { background: rgba(255,255,255,0.3); }
     .details-panel { width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.6rem; color: rgba(255,255,255,0.6); font-size: 0.82rem; margin-bottom: 0.75rem; padding: 0 0.5rem; flex-wrap: wrap; }
@@ -533,22 +649,36 @@
     .detail-item.detail-limit { color: rgba(255,255,255,0.9); font-weight: 600; }
     .exercise-display { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; min-height: clamp(3.2rem, 15vw, 6.5rem); }
     .exercise-text { font-weight: bold; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); text-align: center; line-height: 1.2; white-space: nowrap; animation: exampleIn 0.18s ease; }
-    .exercise-structured { display: inline-flex; align-items: flex-end; justify-content: center; gap: 0; font-weight: bold; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); line-height: 1.2; animation: exampleIn 0.18s ease; flex-wrap: wrap; }
-    .segment { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-end; }
-    .segment.has-scratch { /* číslo + scratch nad ním */ }
-    .segment.segment-op { align-self: flex-end; padding-bottom: 0.05em; }
-    .segment.segment-op.has-scratch { align-self: flex-end; padding-bottom: 0; }
-    .segment.segment-op.has-scratch .scratch-input { width: 2em; }
-    .segment-text { white-space: pre; }
-    .scratch-input { display: block; width: 2.5em; font-size: 0.38em; font-weight: 700; text-align: center; padding: 0.15em 0.2em; margin-bottom: 0.15em; border: none; border-bottom: 2px dashed rgba(255,255,255,0.4); border-radius: 6px 6px 0 0; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); outline: none; transition: border-color 0.2s, background 0.2s, box-shadow 0.2s; -moz-appearance: textfield; }
-    .scratch-input::placeholder { color: rgba(255,255,255,0.28); font-weight: 400; }
-    .scratch-input:focus { border-bottom-color: rgba(255,215,0,0.7); background: rgba(255,255,255,0.15); box-shadow: 0 2px 8px rgba(255,215,0,0.15); }
-    .scratch-input::-webkit-outer-spin-button, .scratch-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-    .scratch-correct { border-color: #48bb78 !important; background: rgba(72,187,120,0.2) !important; color: #c8ffc8; }
-    .scratch-wrong { border-color: #f56565 !important; background: rgba(245,101,101,0.2) !important; color: #ffe0b0; }
-    @@keyframes exampleIn
-    .input-container { width: 100%; max-width: 400px; flex-shrink: 0; margin-top: 0; margin-bottom: 0; }
-    .answer-input { width: 100%; padding: 1rem; font-size: 1.5rem; text-align: center; border: 2px solid white; border-radius: 8px; background: white; color: #333; box-sizing: border-box; }
+    @@keyframes exampleIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+
+    /* Rozšířená nápověda */
+    .btn-hint-extended { margin-bottom: 0.5rem; padding: 0.45rem 1.1rem; background: rgba(255,215,0,0.25); color: #ffe066; border: 1.5px solid rgba(255,215,0,0.5); border-radius: 20px; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: all 0.15s; flex-shrink: 0; }
+    .btn-hint-extended:hover { background: rgba(255,215,0,0.4); }
+    .hint-panel { width: 100%; background: rgba(255,255,255,0.95); border-radius: 14px; padding: 1rem 1.1rem; margin-bottom: 0.6rem; box-shadow: 0 4px 20px rgba(0,0,0,0.2); color: #333; flex-shrink: 0; }
+    .hint-title { font-size: 0.95rem; font-weight: 700; color: #667eea; margin-bottom: 0.6rem; }
+    .hint-body p { margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #555; }
+    .hint-formula { display: flex; align-items: center; gap: 0.5rem; justify-content: center; font-size: 1.4rem; font-weight: 700; margin: 0.4rem 0; flex-wrap: wrap; }
+    .hint-num { color: #333; }
+    .hint-op { color: #667eea; }
+    .hint-result-box { min-width: 2.5rem; height: 2.5rem; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.3rem; font-weight: 800; transition: transform 0.15s; box-shadow: 0 2px 8px rgba(102,126,234,0.3); }
+    .hint-result-box:hover { transform: scale(1.1); }
+    .hint-result-box.revealed { background: linear-gradient(135deg, #48bb78, #38a169); cursor: default; }
+    .hint-click-tip { font-size: 0.75rem; color: #999; text-align: center; margin-top: 0.3rem !important; }
+    .hint-decomp { display: flex; flex-direction: column; gap: 0.5rem; }
+    .hint-decomp-row { display: flex; align-items: center; gap: 0.5rem; }
+    .hint-decomp-label { font-size: 1rem; font-weight: 600; color: #444; min-width: 6rem; }
+    .hint-input { width: 3.5rem; padding: 0.4rem; font-size: 1rem; font-weight: 700; text-align: center; border: 2px solid #d0d5e0; border-radius: 8px; outline: none; transition: border-color 0.2s; -moz-appearance: textfield; }
+    .hint-input::-webkit-outer-spin-button, .hint-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .hint-input:focus { border-color: #667eea; }
+    .hint-input.hint-correct { border-color: #48bb78; background: #f0fff4; color: #276749; }
+    .hint-input.hint-wrong { border-color: #f56565; background: #fff5f5; color: #c53030; }
+    .hint-reveal-btn { font-size: 1.1rem; cursor: pointer; opacity: 0.7; transition: opacity 0.15s; }
+    .hint-reveal-btn:hover { opacity: 1; }
+    .hint-decomp-sum { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.3rem; padding-top: 0.5rem; border-top: 1px dashed #d0d5e0; font-size: 1rem; font-weight: 700; flex-wrap: wrap; }
+    .hint-decomp-sum span { color: #444; }
+
+    .input-container { width: 100%; max-width: 400px; flex-shrink: 0; margin-bottom: 0.5rem; }
+    .answer-input { width: 100%; padding: 1rem; font-size: 1.5rem; text-align: center; border: 2px solid white; border-radius: 8px; background: white; color: #333; }
     .answer-input:focus { outline: none; border-color: #4CAF50; box-shadow: 0 0 0 3px rgba(76,175,80,0.2); }
     .wrong-answer { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; margin-bottom: 0.5rem; text-align: center; }
     .wrong-text { font-size: 1.4rem; font-weight: 600; color: #ff9800; text-decoration: line-through; text-decoration-thickness: 2px; }
@@ -599,5 +729,5 @@
     .btn-result-ghost.full-width { color: #a0aec0; font-weight: 500; }
     @@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @@keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    @@media (max-width: 480px) { .training-session-container { padding: 0.5rem 0.75rem; } .answer-input { padding: 0.6rem; font-size: 1.3rem; } .btn-submit { padding: 0.65rem; font-size: 1rem; } .results-container { padding: 1.25rem; } .results-container h1 { font-size: 1.6rem; } }
+    @@media (max-width: 480px) { .training-session-container { padding: 0.5rem 0.75rem; } .answer-input { padding: 0.6rem; font-size: 1.3rem; } .btn-submit { padding: 0.65rem; font-size: 1rem; } .results-container { padding: 1.25rem; } .results-container h1 { font-size: 1.6rem; } .hint-panel { padding: 0.75rem; } .hint-decomp-label { min-width: 5rem; font-size: 0.9rem; } }
 </style>

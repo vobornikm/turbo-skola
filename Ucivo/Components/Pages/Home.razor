@@ -29,7 +29,7 @@
                 <p>Ahoj! Jsem Turbík a vítám tě v Turbo Škole! 🚀</p>
                 <p>
                     Tady se nezkouší a neznámkuje. Tady se <strong>trénuje na plný pecky!</strong>
-                    Chceš si procvičit násobilku, češtinu nebo angličtinu?
+                    Chceš si procvičit násobilku nebo češtinu?
                     Stačí si vybrat a jít na to.
                 </p>
                 <p>
@@ -50,9 +50,19 @@
         }
         else
         {
-            <p class="cta-hint">Trénovat můžeš hned a zdarma – bez registrace. Po registraci navíc získáš přehled statistik a sledování svého pokroku.</p>
-            <a href="/auth/register" class="btn-cta btn-cta-primary">🚀 Začít trénovat</a>
-            <a href="/auth/login" class="btn-cta btn-cta-secondary">Přihlásit se</a>
+            <a href="/training" class="btn-cta btn-cta-primary">🚀 Jdeme trénovat!</a>
+            <div class="register-hint-box">
+                <div class="register-hint-title">✨ S účtem toho získáš víc</div>
+                <ul class="register-hint-list">
+                    <li>📊 Sledování pokroku a statistiky</li>
+                    <li>👨‍👩‍👧 Profily pro celou rodinu</li>
+                    <li>🎯 Připravené tréninky od rodiče</li>
+                </ul>
+                <div class="register-hint-actions">
+                    <a href="/auth/register" class="btn-cta btn-cta-secondary btn-cta-small">Zaregistrovat se zdarma</a>
+                    <a href="/auth/login" class="btn-cta-link">Přihlásit se</a>
+                </div>
+            </div>
         }
     </section>
 
@@ -217,6 +227,10 @@
         gap: 1rem;
         justify-content: center;
         flex-wrap: wrap;
+        flex-direction: column;
+        align-items: center;
+        max-width: 480px;
+        margin: 0 auto;
     }
 
     .btn-cta {
@@ -246,13 +260,61 @@
         border: 2px solid #667eea;
     }
 
-    .cta-hint {
-        width: 100%;
-        text-align: center;
-        margin: 0 0 0.5rem;
-        font-size: 0.88rem;
+    .btn-cta-small {
+        padding: 0.6rem 1.4rem;
+        font-size: 0.95rem;
+    }
+
+    .btn-cta-link {
         color: #999;
-        line-height: 1.5;
+        font-size: 0.88rem;
+        text-decoration: none;
+        align-self: center;
+    }
+
+    .btn-cta-link:hover {
+        color: #667eea;
+        text-decoration: underline;
+    }
+
+    /* Boxík s výhodami registrace */
+    .register-hint-box {
+        width: 100%;
+        background: #f7f8ff;
+        border: 1.5px solid rgba(102, 126, 234, 0.2);
+        border-radius: 16px;
+        padding: 1.1rem 1.4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+    }
+
+    .register-hint-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #667eea;
+    }
+
+    .register-hint-list {
+        margin: 0;
+        padding: 0 0 0 0.25rem;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .register-hint-list li {
+        font-size: 0.88rem;
+        color: #555;
+    }
+
+    .register-hint-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-top: 0.25rem;
     }
 
     /* ── LEGAL ── */

@@ -58,6 +58,8 @@ public interface ISessionService
     void SetCurrentPairedConsonantsSettings(PairedConsonantsTrainingSettings settings);
     MixedMathTrainingSettings? GetCurrentMixedMathSettings();
     void SetCurrentMixedMathSettings(MixedMathTrainingSettings settings);
+    MultiplyDivideBy2Settings? GetCurrentMultiplyDivideBy2Settings();
+    void SetCurrentMultiplyDivideBy2Settings(MultiplyDivideBy2Settings settings);
     int? ActivePreparedTrainingId { get; }
     void SetActivePreparedTraining(int id);
     void ClearActivePreparedTraining();
@@ -70,6 +72,7 @@ public class SessionService : ISessionService
     private AddSubTrainingSettings? _lastAddSubSettings;
     private PairedConsonantsTrainingSettings? _lastPairedConsonantsSettings;
     private MixedMathTrainingSettings? _lastMixedMathSettings;
+    private MultiplyDivideBy2Settings? _lastMultiplyDivideBy2Settings;
     private int? _activePreparedTrainingId;
     private readonly object _lock = new();
 
@@ -173,6 +176,22 @@ public class SessionService : ISessionService
         lock (_lock)
         {
             _lastMixedMathSettings = settings;
+        }
+    }
+
+    public MultiplyDivideBy2Settings? GetCurrentMultiplyDivideBy2Settings()
+    {
+        lock (_lock)
+        {
+            return _lastMultiplyDivideBy2Settings;
+        }
+    }
+
+    public void SetCurrentMultiplyDivideBy2Settings(MultiplyDivideBy2Settings settings)
+    {
+        lock (_lock)
+        {
+            _lastMultiplyDivideBy2Settings = settings;
         }
     }
 }

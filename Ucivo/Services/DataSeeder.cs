@@ -28,6 +28,12 @@ public class DataSeeder
 
         // Smíšené poèítání do 100
         await SeedMixedMathTrainingAsync(context);
+
+        // Násobení a dìlení dvojkou
+        await SeedMultiplyDivideBy2TrainingAsync(context);
+
+        // Vždy opravit roèníky na 2. tøídu
+        await SeedFixGradesAsync(context);
     }
 
     private static async Task SeedInitialDataAsync(UcivoDbContext context)
@@ -158,7 +164,8 @@ public class DataSeeder
             { "SMALL_MULTIPLICATION", "\u2716\uFE0F" }, // ??
             { "ADD_SUB_100",          "\u2795"  },       // ?
             { "PAIRED_CONSONANTS",    "\U0001F524" },    // ??
-            { "MIXED_MATH_100",       "\U0001F9EE" }     // ??
+            { "MIXED_MATH_100",       "\U0001F9EE" },    // ??
+            { "MULTIPLY_DIVIDE_2",    "\u0032\uFE0F\u20E3" } // 2??
         };
 
         bool changed = false;
@@ -263,5 +270,50 @@ public class DataSeeder
 
         context.TrainingTypes.Add(mixedMath);
         await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedMultiplyDivideBy2TrainingAsync(UcivoDbContext context)
+    {
+        if (await context.TrainingTypes.AnyAsync(t => t.Code == "MULTIPLY_DIVIDE_2"))
+            return;
+
+        var mathematics = await context.Subjects.FirstOrDefaultAsync(s => s.Code == "MATH");
+        if (mathematics == null) return;
+
+        var training = new TrainingType
+        {
+            SubjectId = mathematics.SubjectId,
+            Name = "N\u00e1soben\u00ed a d\u011blen\u00ed 2",
+            Code = "MULTIPLY_DIVIDE_2",
+            Description = "N\u00e1soben\u00ed 0\u201350 \u00d7 2 a d\u011blen\u00ed sud\u00fdch \u010d\u00edsel 0\u2013100 \u00f7 2",
+            Icon = "\u0032\uFE0F\u20E3",
+            GeneratorClassName = "TurboSkola.TrainingGenerators.MultiplyDivideBy2Generator",
+            MinGradeNumber = 2,
+            MaxGradeNumber = 3,
+            DisplayOrder = 4,
+            IsActive = true
+        };
+
+        context.TrainingTypes.Add(training);
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task SeedFixGradesAsync(UcivoDbContext context)
+    {
+        // Všechny tréninky jsou pro 2. tøídu ZŠ
+        var codes = new[] { "SMALL_MULTIPLICATION", "ADD_SUB_100", "MIXED_MATH_100", "MULTIPLY_DIVIDE_2", "PAIRED_CONSONANTS" };
+        var trainings = await context.TrainingTypes.Where(t => codes.Contains(t.Code)).ToListAsync();
+        bool changed = false;
+        foreach (var t in trainings)
+        {
+            if (t.MinGradeNumber != 2 || t.MaxGradeNumber != 2)
+            {
+                t.MinGradeNumber = 2;
+                t.MaxGradeNumber = 2;
+                changed = true;
+            }
+        }
+        if (changed)
+            await context.SaveChangesAsync();
     }
 }

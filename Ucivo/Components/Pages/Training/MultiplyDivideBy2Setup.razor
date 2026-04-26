@@ -1,4 +1,4 @@
-@page "/training/mixedmath/setup"
+@page "/training/multiply-divide-2/setup"
 @rendermode InteractiveServer
 @using TurboSkola.Services
 @using System.Text.Json
@@ -8,14 +8,14 @@
 @inject IProfileService ProfileService
 @inject NavigationManager Navigation
 
-<PageTitle>Nastavení tréninku - Smíšené počítání do 100</PageTitle>
+<PageTitle>Nastavení tréninku - Násobení a dělení 2</PageTitle>
 
 <LoadingSpinner IsLoading="@isStarting" Message="Připravuji trénink..." />
 
 <div class="training-setup-container">
     <div class="setup-header">
         <a href="/training" class="back-link">← Zpět na výběr</a>
-        <h1>🧮 Smíšené počítání do 100</h1>
+        <h1>2️⃣ Násobení a dělení 2</h1>
         <p class="subtitle">Nastav si svůj trénink</p>
     </div>
 
@@ -69,28 +69,13 @@
         <div class="form-section">
             <h3>🔢 Operace</h3>
             <div class="toggles-container">
-                <div class="toggle-item" @onclick="() => { settings.IncludeAddition = !settings.IncludeAddition; StateHasChanged(); }">
-                    <div class="toggle-label">
-                        <span class="toggle-icon">➕</span>
-                        <span>Sčítání</span>
-                    </div>
-                    <div class="toggle-switch @(settings.IncludeAddition ? "on" : "off")">
-                        <div class="toggle-knob"></div>
-                    </div>
-                </div>
-                <div class="toggle-item" @onclick="() => { settings.IncludeSubtraction = !settings.IncludeSubtraction; StateHasChanged(); }">
-                    <div class="toggle-label">
-                        <span class="toggle-icon">➖</span>
-                        <span>Odčítání</span>
-                    </div>
-                    <div class="toggle-switch @(settings.IncludeSubtraction ? "on" : "off")">
-                        <div class="toggle-knob"></div>
-                    </div>
-                </div>
                 <div class="toggle-item" @onclick="() => { settings.IncludeMultiplication = !settings.IncludeMultiplication; StateHasChanged(); }">
                     <div class="toggle-label">
                         <span class="toggle-icon">✖️</span>
-                        <span>Násobení</span>
+                        <div>
+                            <div>Násobení</div>
+                                <div class="toggle-hint">11–50 × 2</div>
+                        </div>
                     </div>
                     <div class="toggle-switch @(settings.IncludeMultiplication ? "on" : "off")">
                         <div class="toggle-knob"></div>
@@ -99,14 +84,17 @@
                 <div class="toggle-item" @onclick="() => { settings.IncludeDivision = !settings.IncludeDivision; StateHasChanged(); }">
                     <div class="toggle-label">
                         <span class="toggle-icon">➗</span>
-                        <span>Dělení</span>
+                        <div>
+                            <div>Dělení</div>
+                                <div class="toggle-hint">sudá čísla 22–100 ÷ 2</div>
+                        </div>
                     </div>
                     <div class="toggle-switch @(settings.IncludeDivision ? "on" : "off")">
                         <div class="toggle-knob"></div>
                     </div>
                 </div>
             </div>
-            @if (!settings.IncludeAddition && !settings.IncludeSubtraction && !settings.IncludeMultiplication && !settings.IncludeDivision)
+            @if (!settings.IncludeMultiplication && !settings.IncludeDivision)
             {
                 <div class="validation-warning">
                     <span>⚠️</span> Musí být vybrána alespoň jedna operace
@@ -118,60 +106,15 @@
         <div class="form-section op-section advanced-section">
             <h3>⚙️ Pokročilá nastavení</h3>
             <div class="toggles-container">
-                <div class="toggle-item" @onclick="() => { settings.IncludeTricks = !settings.IncludeTricks; StateHasChanged(); }">
+                <div class="toggle-item" @onclick="() => { settings.EnableExtendedHint = !settings.EnableExtendedHint; StateHasChanged(); }">
                     <div class="toggle-label">
-                        <span class="toggle-icon">🎲</span>
+                        <span class="toggle-icon">💡</span>
                         <div>
-                            <div>Zahrnout lumpárny</div>
-                            <div class="toggle-hint">např. _ × 5 + 3 = 28</div>
+                            <div>Rozšířená nápověda</div>
+                            <div class="toggle-hint">Nápověda dostupná hned od začátku s postupem výpočtu</div>
                         </div>
                     </div>
-                    <div class="toggle-switch @(settings.IncludeTricks ? "on" : "off")">
-                        <div class="toggle-knob"></div>
-                    </div>
-                </div>
-                <div class="toggle-item" @onclick="() => { settings.IncludeParentheses = !settings.IncludeParentheses; StateHasChanged(); }">
-                    <div class="toggle-label">
-                        <span class="toggle-icon">🔢</span>
-                        <div>
-                            <div>Zahrnout závorky</div>
-                            <div class="toggle-hint">např. 3 × (12 + 5) = , (20 - 4) ÷ 2 =</div>
-                        </div>
-                    </div>
-                    <div class="toggle-switch @(settings.IncludeParentheses ? "on" : "off")">
-                        <div class="toggle-knob"></div>
-                    </div>
-                </div>
-
-                <div class="chip-selector">
-                    <span class="chip-label">Počet čísel ve výpočtu:</span>
-                    <div class="chip-row">
-                        @foreach (var n in new[] { 2, 3, 4, 5, 6, 7, 8 })
-                        {
-                            var isSelected = settings.NumberCounts.Contains(n);
-                            <button class="chip @(isSelected ? "chip-active" : "")"
-                                    @onclick="() => ToggleNumberCount(n)">
-                                @n
-                            </button>
-                        }
-                    </div>
-                    @if (settings.NumberCounts.Count == 0)
-                    {
-                        <div class="validation-warning" style="margin-top: 0.5rem">
-                            <span>⚠️</span> Vyber alespoň jeden počet
-                        </div>
-                    }
-                </div>
-
-                <div class="toggle-item" @onclick="() => { settings.EnableScratchWork = !settings.EnableScratchWork; StateHasChanged(); }">
-                    <div class="toggle-label">
-                        <span class="toggle-icon">📝</span>
-                        <div>
-                            <div>Povolit mezivýpočty</div>
-                            <div class="toggle-hint">Malé políčko nad krokem pro poznámku mezivýsledku</div>
-                        </div>
-                    </div>
-                    <div class="toggle-switch @(settings.EnableScratchWork ? "on" : "off")">
+                    <div class="toggle-switch @(settings.EnableExtendedHint ? "on" : "off")">
                         <div class="toggle-knob"></div>
                     </div>
                 </div>
@@ -181,7 +124,7 @@
         <!-- TLAČÍTKO START / PŘIPRAVIT PRO DÍTĚ -->
         @if (ProfileService.IsCurrentProfileParent)
         {
-            <PrepareForChildPanel TrainingTypeCode="MIXED_MATH_100"
+            <PrepareForChildPanel TrainingTypeCode="MULTIPLY_DIVIDE_2"
                                   SettingsJson="@GetSettingsJson()"
                                   IsValid="@IsValid()"
                                   OnSettingsSaved="SaveSettings" />
@@ -204,7 +147,7 @@
                     <span class="btn-text">Spustit trénink</span>
                 </button>
             </div>
-            <PrepareForChildPanel TrainingTypeCode="MIXED_MATH_100"
+            <PrepareForChildPanel TrainingTypeCode="MULTIPLY_DIVIDE_2"
                                   SettingsJson="@GetSettingsJson()"
                                   IsValid="@IsValid()"
                                   OnSettingsSaved="SaveSettings" />
@@ -213,9 +156,8 @@
 </div>
 
 @code {
-    private MixedMathTrainingSettings settings = new();
+    private MultiplyDivideBy2Settings settings = new();
     private bool isStarting = false;
-    private bool isInitialized = false;
     private int timeValue = 5;
     private int countValue = 20;
 
@@ -225,20 +167,16 @@
         {
             await Task.Delay(150);
             var profileId = ProfileService?.CurrentProfileId;
-            settings = await SettingsService.GetMixedMathSettingsAsync(profileId);
+            settings = await SettingsService.GetMultiplyDivideBy2SettingsAsync(profileId);
 
             if (settings.DurationType == "Time")
                 timeValue = settings.DurationValue;
             else
                 countValue = settings.DurationValue;
 
-            isInitialized = true;
             StateHasChanged();
         }
-        catch
-        {
-            isInitialized = true;
-        }
+        catch { }
     }
 
     private void SwitchToTime()
@@ -258,9 +196,7 @@
     }
 
     private bool IsValid() =>
-        (settings.IncludeAddition || settings.IncludeSubtraction || settings.IncludeMultiplication || settings.IncludeDivision)
-        && settings.DurationValue > 0
-        && settings.NumberCounts.Count > 0;
+        (settings.IncludeMultiplication || settings.IncludeDivision) && settings.DurationValue > 0;
 
     private async Task StartTraining()
     {
@@ -271,14 +207,14 @@
             StateHasChanged();
             await Task.Delay(100);
 
-            SessionService.SetCurrentMixedMathSettings(settings);
+            SessionService.SetCurrentMultiplyDivideBy2Settings(settings);
 
             if (AuthService?.IsAuthenticated == true && ProfileService.CurrentProfileId.HasValue)
             {
-                await SettingsService.SaveMixedMathSettingsAsync(ProfileService.CurrentProfileId.Value, settings);
+                await SettingsService.SaveMultiplyDivideBy2SettingsAsync(ProfileService.CurrentProfileId.Value, settings);
             }
 
-            Navigation.NavigateTo("/training/mixedmath/session");
+            Navigation.NavigateTo("/training/multiply-divide-2/session");
         }
         finally
         {
@@ -293,21 +229,12 @@
         _ => "příkladů"
     };
 
-    private void ToggleNumberCount(int n)
-    {
-        if (settings.NumberCounts.Contains(n))
-            settings.NumberCounts.Remove(n);
-        else
-            settings.NumberCounts.Add(n);
-        StateHasChanged();
-    }
-
     private string GetSettingsJson() => JsonSerializer.Serialize(settings);
 
     private async Task SaveSettings()
     {
         if (AuthService?.IsAuthenticated == true && ProfileService.CurrentProfileId.HasValue)
-            await SettingsService.SaveMixedMathSettingsAsync(ProfileService.CurrentProfileId.Value, settings);
+            await SettingsService.SaveMultiplyDivideBy2SettingsAsync(ProfileService.CurrentProfileId.Value, settings);
     }
 }
 
@@ -323,7 +250,6 @@
     .form-section:last-child { border-bottom: none; }
     .form-section h3 { margin: 0 0 1.5rem 0; font-size: 1.2rem; color: #333; font-weight: 600; }
     .advanced-section { border-left: 4px solid #ed8936; }
-    .accessibility-section { border-left: 4px solid #38b2ac; }
     .segmented-control { display: grid; grid-template-columns: 1fr 1fr; background: #f5f5f5; border-radius: 12px; padding: 4px; margin-bottom: 1.5rem; }
     .segment { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 1rem; border: none; background: transparent; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-size: 0.95rem; font-weight: 500; color: #666; }
     .segment .icon { font-size: 1.5rem; }
@@ -348,12 +274,6 @@
     .toggle-knob { width: 24px; height: 24px; background: white; border-radius: 50%; position: absolute; top: 3px; left: 3px; transition: transform 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
     .toggle-switch.on .toggle-knob { transform: translateX(26px); }
     .validation-warning { margin-top: 1rem; padding: 0.75rem; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; color: #856404; font-size: 0.9rem; }
-    .chip-selector { margin-top: 0.5rem; padding: 0.75rem 1rem; background: #f0f4ff; border-radius: 10px; }
-    .chip-label { display: block; font-size: 0.82rem; font-weight: 600; color: #555; margin-bottom: 0.5rem; }
-    .chip-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-    .chip { min-width: 2.5rem; padding: 0.45rem 0.75rem; border: 2px solid #d0d5e0; border-radius: 20px; background: white; color: #555; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.15s; }
-    .chip:hover { border-color: #667eea; color: #667eea; }
-    .chip.chip-active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-color: transparent; box-shadow: 0 2px 8px rgba(102,126,234,0.3); }
     .start-section { padding: 2rem; }
     .btn-start-modern { width: 100%; padding: 1.5rem; border: none; border-radius: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-size: 1.2rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 1rem; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 15px rgba(102,126,234,0.4); }
     .btn-start-modern:hover:not(.disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.5); }
